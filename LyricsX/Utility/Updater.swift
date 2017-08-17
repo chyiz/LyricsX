@@ -101,7 +101,8 @@ func checkForUpdate(force: Bool = false) {
             guard let remote = remoteVersion else {
                 return
             }
-            defaults[.isInMASReview] = local > remote
+            defaults[.isInMASReview] = false
+            //            defaults[.isInMASReview] = local > remote
         }
     }
     
