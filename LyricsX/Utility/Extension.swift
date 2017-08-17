@@ -142,7 +142,7 @@ extension Lyrics {
         }
         let titleForReading: String = title.replacingOccurrences(of: "/", with: "&")
         let artistForReading: String = artist.replacingOccurrences(of: "/", with: "&")
-        let lrcFileURL = url.appendingPathComponent("\(titleForReading) - \(artistForReading).lrc")
+        let lrcFileURL = url.appendingPathComponent("\(artistForReading) - \(titleForReading).lrc")
         
         guard let lrcContents = try? String(contentsOf: lrcFileURL, encoding: String.Encoding.utf8),
             let lrc = Lyrics(lrcContents) else {
