@@ -62,7 +62,9 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
         progressIndicator.isHidden = false
         let track = MusicPlayerManager.shared.player?.currentTrack
         let duration = track?.duration ?? 0
-        lyricsManager.searchLyrics(title: searchTitle, artist: searchArtist, duration: duration)
+        let title = track?.name ?? ""
+        let artist = track?.artist ?? ""
+        lyricsManager.searchLyrics(searchTitle: searchTitle, searchArtist: searchArtist, title: title, artist: artist, duration: duration)
         tableView.reloadData()
     }
     
@@ -156,7 +158,7 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
         }
     }
     
-    func expandPreview() {
+    private func expandPreview() {
         let expandingHeight = -view.subviews.reduce(0) { min($0, $1.frame.minY) }
         let windowFrame = self.view.window!.frame.with {
             $0.size.height += expandingHeight
@@ -176,7 +178,7 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
         })
     }
     
-    func updateImage() {
+    private func updateImage() {
         let index = tableView.selectedRow
         guard index >= 0 else {
             return
