@@ -2,7 +2,7 @@
 //  AppController.swift
 //
 //  This file is part of LyricsX
-//  Copyright (C) 2017  Xander Deng
+//  Copyright (C) 2017 Xander Deng - https://github.com/ddddxxx/LyricsX
 //
 //  This program is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
@@ -45,7 +45,7 @@ class AppController: NSObject, MusicPlayerDelegate, LyricsConsuming {
         }
     }
     
-    dynamic var lyricsOffset: Int {
+    @objc dynamic var lyricsOffset: Int {
         get {
             return currentLyrics?.offset ?? 0
         }
@@ -72,7 +72,14 @@ class AppController: NSObject, MusicPlayerDelegate, LyricsConsuming {
             return
         }
         if overwrite || player.currentLyrics == nil {
-            let lyrics = currentLyrics.contentString(withMetadata: false, ID3: false, timeTag: false, translation: defaults[.WriteiTunesWithTranslation])
+            let lyrics = currentLyrics.lines.map { line in
+                var content = line.content
+                if defaults[.WriteiTunesWithTranslation],
+                    let translation = line.translation {
+                    content += "\n" + translation
+                }
+                return content
+            }.joined(separator: "\n")
             let regex = try! NSRegularExpression(pattern: "\\n{3}")
             let replaced = regex.stringByReplacingMatches(in: lyrics, range: NSRange(location: 0, length: lyrics.characters.count), withTemplate: "\n\n")
             player.currentLyrics = replaced.trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
@@ -83,7 +90,7 @@ class AppController: NSObject, MusicPlayerDelegate, LyricsConsuming {
     
     func runningStateChanged(isRunning: Bool) {
         if defaults[.LaunchAndQuitWithPlayer], !isRunning {
-            NSApplication.shared().terminate(nil)
+            NSApplication.shared.terminate(nil)
         }
     }
     

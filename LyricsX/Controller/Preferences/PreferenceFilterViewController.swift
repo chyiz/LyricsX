@@ -2,7 +2,7 @@
 //  PreferenceFilterViewController.swift
 //
 //  This file is part of LyricsX
-//  Copyright (C) 2017  Xander Deng
+//  Copyright (C) 2017 Xander Deng - https://github.com/ddddxxx/LyricsX
 //
 //  This program is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
@@ -22,8 +22,8 @@ import Cocoa
 
 class PreferenceFilterViewController: NSViewController {
     
-    dynamic var directFilter = [FilterKey]()
-    dynamic var colonFilter = [FilterKey]()
+    @objc dynamic var directFilter = [FilterKey]()
+    @objc dynamic var colonFilter = [FilterKey]()
     
     override func viewDidLoad() {
         loadFilter()
@@ -58,7 +58,7 @@ class PreferenceFilterViewController: NSViewController {
 @objc(FilterKey)
 class FilterKey: NSObject, NSCoding {
     
-    var keyword = ""
+    @objc var keyword = ""
     
     override init() {
         keyword = NSLocalizedString("NEW_KEYWORD", comment: "default value when user adding a lyrics filter keyword")

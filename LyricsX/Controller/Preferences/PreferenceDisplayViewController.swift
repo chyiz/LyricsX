@@ -2,7 +2,7 @@
 //  PreferenceDisplayViewController.swift
 //
 //  This file is part of LyricsX
-//  Copyright (C) 2017  Xander Deng
+//  Copyright (C) 2017 Xander Deng - https://github.com/ddddxxx/LyricsX
 //
 //  This program is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
@@ -33,7 +33,17 @@ class PreferenceDisplayViewController: NSViewController {
         let fontSize = defaults[.DesktopLyricsFontSize]
         font = NSFont(name: fontName, size: CGFloat(fontSize))
         
+        let _ = PreferenceDisplayViewController.swizzler
+        
         super.viewDidLoad()
+    }
+    
+    override func viewDidDisappear() {
+        let fontManger = NSFontManager.shared
+        if fontManger.target === self {
+            fontManger.target = nil
+            NSFontPanel.shared.close()
+        }
     }
     
     override func changeFont(_ sender: Any?) {
@@ -47,13 +57,26 @@ class PreferenceDisplayViewController: NSViewController {
         defaults[.DesktopLyricsFontSize] = Int(font.pointSize)
     }
     
-    override func validModesForFontPanel(_ fontPanel: NSFontPanel) -> Int {
-        return Int(NSFontPanelSizeModeMask | NSFontPanelCollectionModeMask | NSFontPanelFaceModeMask)
+    static var swizzler: Any? = {
+        let cls = PreferenceDisplayViewController.self
+        let sel = #selector(NSObject.validModesForFontPanel)
+        let dummySel = #selector(PreferenceDisplayViewController.dummyValidModesForFontPanel)
+        guard let dummyIMP = class_getMethodImplementation(cls, dummySel),
+            let dummyImpl = class_getInstanceMethod(cls, dummySel),
+            let typeEncoding = method_getTypeEncoding(dummyImpl) else {
+                fatalError("failed to replace method \(sel) in \(cls)")
+        }
+        class_replaceMethod(cls, sel, dummyIMP, typeEncoding)
+        return nil
+    }()
+    
+    @objc func dummyValidModesForFontPanel(_ fontPanel: NSFontPanel) -> UInt32 {
+        return NSFontPanelSizeModeMask | NSFontPanelCollectionModeMask | NSFontPanelFaceModeMask
     }
     
     @IBAction func showFontPanel(_ sender: NSButton) {
-        let fontManger: NSFontManager = NSFontManager.shared()
-        let fontPanel: NSFontPanel = NSFontPanel.shared()
+        let fontManger = NSFontManager.shared
+        let fontPanel = NSFontPanel.shared
         fontManger.target = self
         fontManger.setSelectedFont(font, isMultiple: false)
         fontPanel.makeKeyAndOrderFront(self)
@@ -64,13 +87,13 @@ class PreferenceDisplayViewController: NSViewController {
 class AlphaColorWell: NSColorWell {
     
     override func activate(_ exclusive: Bool) {
-        NSColorPanel.shared().showsAlpha = true
+        NSColorPanel.shared.showsAlpha = true
         super.activate(exclusive)
     }
     
     override func deactivate() {
         super.deactivate()
-        NSColorPanel.shared().showsAlpha = false
+        NSColorPanel.shared.showsAlpha = false
     }
     
 }

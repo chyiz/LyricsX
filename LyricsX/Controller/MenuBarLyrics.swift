@@ -2,7 +2,7 @@
 //  MenuBarLyrics.swift
 //
 //  This file is part of LyricsX
-//  Copyright (C) 2017  Xander Deng
+//  Copyright (C) 2017 Xander Deng - https://github.com/ddddxxx/LyricsX
 //
 //  This program is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
@@ -32,22 +32,21 @@ class MenuBarLyrics: NSObject {
     
     private var lyrics = ""
     
+    var statusItemObservation: UserDefaults.KeyValueObservation?
+    
     private override init() {
-        statusItem = NSStatusBar.system().statusItem(withLength: NSVariableStatusItemLength)
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
         NotificationCenter.default.addObserver(self, selector: #selector(handlePositionChange), name: .PositionChange, object: nil)
-        NSWorkspace.shared().notificationCenter.addObserver(self, selector: #selector(updateStatusItem), name: .NSWorkspaceDidActivateApplication, object: nil)
-        defaults.addObserver(key: .MenuBarLyricsEnabled) { _ in
-            self.updateStatusItem()
-        }
-        defaults.addObserver(key: .CombinedMenubarLyrics) { _ in
-            self.updateStatusItem()
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(updateStatusItem), name: NSWorkspace.didActivateApplicationNotification, object: nil)
+        statusItemObservation = defaults.observe(keys: [.MenuBarLyricsEnabled, .CombinedMenubarLyrics], options: []) { [weak self] in
+            self?.updateStatusItem()
         }
         updateStatusItem()
     }
     
-    func handlePositionChange(_ n: Notification) {
-        let lrc = (n.userInfo?["lrc"] as? LyricsLine)?.sentence ?? ""
+    @objc func handlePositionChange(_ n: Notification) {
+        let lrc = (n.userInfo?["lrc"] as? LyricsLine)?.content ?? ""
         if lrc == lyrics {
             return
         }
@@ -56,7 +55,7 @@ class MenuBarLyrics: NSObject {
         updateStatusItem()
     }
     
-    func updateStatusItem() {
+    @objc func updateStatusItem() {
         guard defaults[.MenuBarLyricsEnabled], !lyrics.isEmpty else {
             setImageStatusItem()
             lyricsItem = nil
@@ -74,7 +73,7 @@ class MenuBarLyrics: NSObject {
         setImageStatusItem()
         
         if lyricsItem == nil {
-            lyricsItem = NSStatusBar.system().statusItem(withLength: NSVariableStatusItemLength)
+            lyricsItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
             lyricsItem?.highlightMode = false
         }
         lyricsItem?.title = lyrics
@@ -100,7 +99,7 @@ class MenuBarLyrics: NSObject {
     private func setTextStatusItem(string: String) {
         statusItem.title = string
         statusItem.image = nil
-        statusItem.length = NSVariableStatusItemLength
+        statusItem.length = NSStatusItem.variableLength
     }
     
     private func setImageStatusItem() {
@@ -116,9 +115,43 @@ class MenuBarLyrics: NSObject {
 extension NSStatusItem {
     
     fileprivate var isVisibe: Bool {
-        let windowNumber = (button?.window?.windowNumber).map(CGWindowID.init(_:)) ?? kCGNullWindowID
-        let info = CGWindowListCopyWindowInfo([.optionOnScreenAboveWindow], windowNumber)
-        return CFArrayGetCount(info) == 0
+        guard let buttonFrame = button?.frame,
+            let frame = button?.window?.convertToScreen(buttonFrame) else {
+                return false
+        }
+        
+        let point = CGPoint(x: frame.midX, y: frame.midY)
+        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(point) }) else {
+            return false
+        }
+        let carbonPoint = CGPoint(x: point.x, y: screen.frame.height - point.y - 1)
+        
+        guard let element = AXUIElement.copyAt(position: carbonPoint) else {
+            return false
+        }
+        
+        return getpid() == element.pid
+    }
+}
+
+extension AXUIElement {
+    
+    fileprivate static func copyAt(position: NSPoint) -> AXUIElement? {
+        var element: AXUIElement?
+        let error = AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(), Float(position.x), Float(position.y), &element)
+        guard error == .success else {
+            return nil
+        }
+        return element
+    }
+    
+    fileprivate var pid: pid_t? {
+        var pid: pid_t = 0
+        let error = AXUIElementGetPid(self, &pid)
+        guard error == .success else {
+            return nil
+        }
+        return pid
     }
 }
 
@@ -128,7 +161,7 @@ extension String {
         var components: [String] = []
         let range = Range(uncheckedBounds: (startIndex, endIndex))
         enumerateSubstrings(in: range, options: options) { (_, _, r, _) in
-            components.append(self[r])
+            components.append(String(self[r]))
         }
         return components
     }
