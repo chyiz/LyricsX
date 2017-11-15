@@ -20,6 +20,7 @@
 
 import Cocoa
 import LyricsProvider
+import MusicPlayer
 
 class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSource, LyricsConsuming {
     
@@ -28,7 +29,7 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
     @objc dynamic var searchArtist = ""
     @objc dynamic var searchTitle = "" {
         didSet {
-            searchButton.isEnabled = searchTitle.characters.count > 0
+            searchButton.isEnabled = searchTitle.count > 0
         }
     }
     @objc dynamic var selectedIndex = NSIndexSet()
@@ -51,7 +52,7 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
         
         let track = MusicPlayerManager.shared.player?.currentTrack
         searchArtist = track?.artist ?? ""
-        searchTitle = track?.name ?? ""
+        searchTitle = track?.title ?? ""
         searchAction(nil)
         
         super.viewDidLoad()
@@ -62,7 +63,7 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
         progressIndicator.isHidden = false
         let track = MusicPlayerManager.shared.player?.currentTrack
         let duration = track?.duration ?? 0
-        let title = track?.name ?? ""
+        let title = track?.title ?? ""
         let artist = track?.artist ?? ""
         lyricsManager.searchLyrics(searchTitle: searchTitle, searchArtist: searchArtist, title: title, artist: artist, duration: duration)
         tableView.reloadData()
@@ -80,6 +81,9 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
         
         let lrc = lyricsManager.lyrics[index]
         AppController.shared.currentLyrics = lrc
+        if defaults[.WriteToiTunesAutomatically] {
+            AppController.shared.writeToiTunes(overwrite: true)
+        }
     }
     
     // MARK: - LyricsSourceDelegate
@@ -128,12 +132,12 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
         if self.hideLrcPreviewConstraint?.isActive == true {
             self.expandPreview()
         }
-        self.lyricsPreviewTextView.string = self.lyricsManager.lyrics[index].description
+        self.lyricsPreviewTextView.string = self.lyricsManager.lyrics[index].legacyDescription
         self.updateImage()
     }
     
     func tableView(_ tableView: NSTableView, writeRowsWith rowIndexes: IndexSet, to pboard: NSPasteboard) -> Bool {
-        let lrcContent = lyricsManager.lyrics[rowIndexes.first!].description
+        let lrcContent = lyricsManager.lyrics[rowIndexes.first!].legacyDescription
         pboard.declareTypes([.string, .filePromise], owner: self)
         pboard.setString(lrcContent, forType: .string)
         pboard.setPropertyList(["lrc"], forType: .filePromise)
@@ -145,7 +149,7 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
             let fileName = lyricsManager.lyrics[index].fileName ?? "Unknown"
             
             let destURL = dropDestination.appendingPathComponent(fileName)
-            let lrcStr = lyricsManager.lyrics[index].description
+            let lrcStr = lyricsManager.lyrics[index].legacyDescription
             
             do {
                 try lrcStr.write(to: destURL, atomically: true, encoding: .utf8)

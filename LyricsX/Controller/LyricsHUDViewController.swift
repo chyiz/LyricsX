@@ -19,6 +19,7 @@
 //
 
 import Cocoa
+import MusicPlayer
 
 class LyricsHUDViewController: NSViewController, ScrollLyricsViewDelegate, DragNDropDelegate {
     
@@ -61,6 +62,12 @@ class LyricsHUDViewController: NSViewController, ScrollLyricsViewDelegate, DragN
         MusicPlayerManager.shared.player?.playerPosition = pos
         isTracking = true
     }
+    
+    func scrollWheelDidStartScroll() {
+        isTracking = false
+    }
+    
+    func scrollWheelDidEndScroll() {}
     
     // MARK: - Handler
     

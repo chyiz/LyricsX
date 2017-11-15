@@ -23,6 +23,8 @@ import LyricsProvider
 
 protocol ScrollLyricsViewDelegate: class {
     func doubleClickLyricsLine(at position: TimeInterval)
+    func scrollWheelDidStartScroll()
+    func scrollWheelDidEndScroll()
 }
 
 class ScrollLyricsView: NSScrollView {
@@ -54,7 +56,7 @@ class ScrollLyricsView: NSScrollView {
             if let trans = line.translation, defaults[.PreferBilingualLyrics] {
                 lineStr += "\n" + trans
             }
-            let range = NSRange(location: lrcContent.characters.count, length: lineStr.characters.count)
+            let range = NSRange(location: lrcContent.utf16.count, length: lineStr.utf16.count)
             newRanges.append((line.position, range))
             lrcContent += lineStr
             if line != enabledLrc.last {
@@ -64,7 +66,7 @@ class ScrollLyricsView: NSScrollView {
         ranges = newRanges
         textView.string = lrcContent
         highlightedRange = nil
-        let range = NSMakeRange(0, textView.string.characters.count)
+        let range = NSMakeRange(0, textView.string.utf16.count)
         let style = NSMutableParagraphStyle().with {
             $0.alignment = .center
         }
@@ -92,6 +94,17 @@ class ScrollLyricsView: NSScrollView {
         }
         if let (position, _) = clickRange.first {
             delegate?.doubleClickLyricsLine(at: position)
+        }
+    }
+    
+    override func scrollWheel(with event: NSEvent) {
+        switch event.momentumPhase {
+        case .began:
+            delegate?.scrollWheelDidStartScroll()
+        case .ended, .cancelled:
+            delegate?.scrollWheelDidEndScroll()
+        default:
+            break
         }
     }
     
