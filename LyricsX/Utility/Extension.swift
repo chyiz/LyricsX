@@ -89,7 +89,7 @@ extension Lyrics {
             let artist = metadata.artist?.replacingOccurrences(of: "/", with: "&") else {
             return nil
         }
-        return "\(title) - \(artist).lrc"
+        return "\(artist) - \(title).lrc"
     }
     
 }
