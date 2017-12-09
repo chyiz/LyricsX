@@ -22,19 +22,14 @@ import Cocoa
 
 class PreferenceDisplayViewController: NSViewController, NSWindowDelegate {
     
-    @IBOutlet weak var backgroundColorWell: NSColorWell!
-    @IBOutlet weak var lyricsColorWell: NSColorWell!
-    @IBOutlet weak var shadowColorWell: NSColorWell!
+    var karaokeFont = NSFont(name: defaults[.DesktopLyricsFontName], size: CGFloat(defaults[.DesktopLyricsFontSize])) ?? NSFont.labelFont(ofSize: CGFloat(defaults[.DesktopLyricsFontSize]))
+    var hudFont = NSFont(name: defaults[.LyricsWindowFontName], size: CGFloat(defaults[.LyricsWindowFontSize])) ?? NSFont.labelFont(ofSize: CGFloat(defaults[.LyricsWindowFontSize]))
     
-    var font: NSFont!
+    // TODO: ugly code
+    var isSettingKaraokeFont = true
     
     override func viewDidLoad() {
-        let fontName = defaults[.DesktopLyricsFontName]!
-        let fontSize = defaults[.DesktopLyricsFontSize]
-        font = NSFont(name: fontName, size: CGFloat(fontSize))
-        
         _ = PreferenceDisplayViewController.swizzler
-        
         super.viewDidLoad()
     }
     
@@ -51,10 +46,15 @@ class PreferenceDisplayViewController: NSViewController, NSWindowDelegate {
             return
         }
         
-        font = manager.convert(font)
-        
-        defaults[.DesktopLyricsFontName] = font.fontName
-        defaults[.DesktopLyricsFontSize] = Int(font.pointSize)
+        if isSettingKaraokeFont {
+            karaokeFont = manager.convert(karaokeFont)
+            defaults[.DesktopLyricsFontName] = karaokeFont.fontName
+            defaults[.DesktopLyricsFontSize] = Int(karaokeFont.pointSize)
+        } else {
+            hudFont = manager.convert(hudFont)
+            defaults[.LyricsWindowFontName] = hudFont.fontName
+            defaults[.LyricsWindowFontSize] = Int(hudFont.pointSize)
+        }
     }
     
     static let swizzler: () = {
@@ -74,10 +74,11 @@ class PreferenceDisplayViewController: NSViewController, NSWindowDelegate {
     }
     
     @IBAction func showFontPanel(_ sender: NSButton) {
+        isSettingKaraokeFont = sender.tag == 0
         let fontManger = NSFontManager.shared
         let fontPanel = fontManger.fontPanel(true)
         fontManger.target = self
-        fontManger.setSelectedFont(font, isMultiple: false)
+        fontManger.setSelectedFont(isSettingKaraokeFont ? karaokeFont : hudFont, isMultiple: false)
         fontPanel?.delegate = self
         fontPanel?.makeKeyAndOrderFront(self)
     }
