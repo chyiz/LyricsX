@@ -36,13 +36,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @IBOutlet weak var lyricsOffsetStepper: NSStepper!
     @IBOutlet weak var statusBarMenu: NSMenu!
     
-    var desktopLyrics: NSWindowController?
+    var desktopLyrics: KaraokeLyricsWindowController?
+    
+    weak var searchLyricsVC: SearchLyricsViewController?
     
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         registerUserDefaults()
         Fabric.with([Crashlytics.self])
         
-        desktopLyrics = (NSStoryboard.main!.instantiateController(withIdentifier: .DesktopLyricsWindow) as! NSWindowController)
+        desktopLyrics = (NSStoryboard.main!.instantiateController(withIdentifier: .DesktopLyricsWindow) as! KaraokeLyricsWindowController)
         desktopLyrics?.showWindow(nil)
         desktopLyrics?.window?.makeKeyAndOrderFront(nil)
         
@@ -50,7 +52,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         MenuBarLyrics.shared.statusItem.action = #selector(clickMenuBarItem)
         
         let controller = AppController.shared
-        lyricsOffsetStepper.bind(.value, to: controller, withKeyPath: #keyPath(AppController.lyricsOffset), options: [NSBindingOption.continuouslyUpdatesValue: true])
+        lyricsOffsetStepper.bind(.value, to: controller, withKeyPath: #keyPath(AppController.lyricsOffset), options: [.continuouslyUpdatesValue: true])
         lyricsOffsetTextField.bind(.value, to: controller, withKeyPath: #keyPath(AppController.lyricsOffset), options: [.continuouslyUpdatesValue: true])
         
         setupShortcuts()
@@ -61,8 +63,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         
         let sharedKeys = [
-            UserDefaults.DefaultKeys.LaunchAndQuitWithPlayer.rawValue,
-            UserDefaults.DefaultKeys.PreferredPlayerIndex.rawValue
+            UserDefaults.DefaultsKeys.LaunchAndQuitWithPlayer.key,
+            UserDefaults.DefaultsKeys.PreferredPlayerIndex.key
         ]
         sharedKeys.forEach {
             groupDefaults.bind(NSBindingName($0), to: defaults, withKeyPath: $0)
@@ -156,6 +158,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         AppController.shared.writeToiTunes(overwrite: true)
     }
     
+    @IBAction func searchLyrics(_ sender: Any?) {
+        let searchLyricsWindow: NSWindow
+        if let vc = searchLyricsVC {
+            searchLyricsWindow = vc.view.window!
+            vc.autoFillSearchFieldAndSearch()
+        } else {
+            let vc = NSStoryboard.main!.instantiateController(withIdentifier: .init("SearchLyricsViewController")) as! SearchLyricsViewController
+            searchLyricsWindow = NSWindow(contentViewController: vc)
+            searchLyricsWindow.title = NSLocalizedString("Search Lyrics", comment: "window title")
+            searchLyricsVC = vc
+        }
+        searchLyricsWindow.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+    
     @IBAction func wrongLyrics(_ sender: Any?) {
         if let id = AppController.shared.playerManager.player?.currentTrack?.id {
             defaults[.NoSearchingTrackIds].append(id)
@@ -167,17 +184,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func registerUserDefaults() {
+        let currentLang = NSLocale.preferredLanguages.first!
+        let isZh = currentLang.hasPrefix("zh") || currentLang.hasPrefix("yue")
+        let isHant = isZh && (currentLang.contains("-Hant") || currentLang.contains("-HK"))
+        
         let defaultsUrl = Bundle.main.url(forResource: "UserDefaults", withExtension: "plist")!
-        let d = NSDictionary(contentsOf: defaultsUrl) as! [String: Any]
-        defaults.register(defaults: d)
+        let dict = NSDictionary(contentsOf: defaultsUrl) as! [String: Any]
+        defaults.register(defaults: dict)
         defaults.register(defaults: [
             .DesktopLyricsColor: #colorLiteral(red: 1, green: 1, blue: 1, alpha: 1),
             .DesktopLyricsShadowColor: #colorLiteral(red: 0, green: 0.9914394021, blue: 1, alpha: 1),
             .DesktopLyricsBackgroundColor: #colorLiteral(red: 0, green: 0, blue: 0, alpha: 0.6041579279),
-            .LyricsWindowFontName: "Helvetica",
-            .LyricsWindowFontSize: 12,
             .LyricsWindowTextColor: #colorLiteral(red: 0.7540688515, green: 0.7540867925, blue: 0.7540771365, alpha: 1),
             .LyricsWindowHighlightColor: #colorLiteral(red: 0.8866666667, green: 1, blue: 0.8, alpha: 1),
+            .PreferBilingualLyrics: isZh,
+            .ChineseConversionIndex: isHant ? 2 : 0,
             ])
     }
 }
@@ -190,7 +211,7 @@ extension NSUserInterfaceItemIdentifier {
 
 extension MASShortcutBinder {
     
-    func bindShortcut<T>(with defaultKay: UserDefaults.DefaultKey<T>, to action: @escaping () -> Void) {
-        bindShortcut(withDefaultsKey: defaultKay.rawValue, toAction: action)
+    func bindShortcut<T>(with defaultsKay: UserDefaults.DefaultsKey<T>, to action: @escaping () -> Void) {
+        bindShortcut(withDefaultsKey: defaultsKay.key, toAction: action)
     }
 }

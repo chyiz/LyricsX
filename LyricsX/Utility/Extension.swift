@@ -40,8 +40,20 @@ extension Comparable {
 
 extension NSObject {
     
-    func bind<T>(_ binding: NSBindingName, to observable: Any, withKeyPath keyPath: UserDefaults.DefaultKey<T>, options: [NSBindingOption : Any]? = nil) {
-        bind(binding, to: observable, withKeyPath: keyPath.rawValue, options: options)
+    func bind<T>(_ binding: NSBindingName, to observable: UserDefaults, withDefaultName defaultName: UserDefaults.DefaultsKey<T>, options: [NSBindingOption : Any] = [:]) {
+        var options = options
+        if let t = defaultName.valueTransformer {
+            switch t {
+            case is UserDefaults.KeyedArchiveValueTransformer:
+                options[.valueTransformerName] = NSValueTransformerName.keyedUnarchiveFromDataTransformerName
+            case is UserDefaults.ArchiveValueTransformer:
+                options[.valueTransformerName] = NSValueTransformerName.unarchiveFromDataTransformerName
+            default:
+                break
+            }
+        }
+        
+        bind(binding, to: observable, withKeyPath: defaultName.key, options: options)
     }
 }
 
@@ -51,9 +63,27 @@ extension MusicPlayerName {
         switch index {
         case 0: self = .itunes
         case 1: self = .spotify
-        case 2: self = .vox
         default: return nil
         }
+    }
+}
+
+extension NSFont {
+    
+    convenience init?(name fontName: String, size fontSize: CGFloat, fallback fallbackNames: [String]) {
+        let cascadeList = fallbackNames.flatMap { NSFontDescriptor.init(name: $0, size: fontSize).matchingFontDescriptor(withMandatoryKeys: [.name, .size]) }
+        let descriptor = NSFontDescriptor(fontAttributes: [.name: fontName, .cascadeList: cascadeList])
+        self.init(descriptor: descriptor, size: fontSize)
+    }
+}
+
+extension UserDefaults {
+    
+    var desktopLyricsFont: NSFont {
+        return NSFont.init(name: self[.DesktopLyricsFontName],
+                           size: CGFloat(self[.DesktopLyricsFontSize]),
+                           fallback: self[.DesktopLyricsFontNameFallback])
+            ?? NSFont.systemFont(ofSize: CGFloat(self[.DesktopLyricsFontSize]))
     }
 }
 
@@ -106,35 +136,6 @@ extension Lyrics {
 
 extension Lyrics {
     
-    static func loadFromLocal(title: String, artist: String) -> Lyrics? {
-        guard let (url, security) = defaults.lyricsSavingPath() else {
-            return nil
-        }
-        if security {
-            guard url.startAccessingSecurityScopedResource() else {
-                return nil
-            }
-        }
-        defer {
-            if security {
-                url.stopAccessingSecurityScopedResource()
-            }
-        }
-        let titleForReading: String = title.replacingOccurrences(of: "/", with: "&")
-        let artistForReading: String = artist.replacingOccurrences(of: "/", with: "&")
-        let lrcFileURL = url.appendingPathComponent("\(artistForReading) - \(titleForReading).lrc")
-        
-        guard let lrcContents = try? String(contentsOf: lrcFileURL, encoding: String.Encoding.utf8),
-            let lrc = Lyrics(lrcContents) else {
-            return nil
-        }
-        
-        lrc.metadata.source = .Local
-        lrc.metadata.title = title
-        lrc.metadata.artist = artist
-        return lrc
-    }
-    
     func saveToLocal() {
         guard let (url, security) = defaults.lyricsSavingPath() else {
             return
@@ -168,7 +169,8 @@ extension Lyrics {
             if fileManager.fileExists(atPath: lrcFileURL.path) {
                 try fileManager.removeItem(at: lrcFileURL)
             }
-            try legacyDescription.write(to: lrcFileURL, atomically: true, encoding: .utf8)
+            try description.write(to: lrcFileURL, atomically: true, encoding: .utf8)
+            metadata.localURL = lrcFileURL
         } catch {
             log(error.localizedDescription)
             return

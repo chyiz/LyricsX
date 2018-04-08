@@ -22,8 +22,9 @@ import Foundation
 import AppKit
 import LyricsProvider
 import MusicPlayer
+import OpenCC
 
-class AppController: NSObject, MusicPlayerManagerDelegate, LyricsConsuming {
+class AppController: NSObject, MusicPlayerManagerDelegate {
     
     static let shared = AppController()
     
@@ -38,13 +39,15 @@ class AppController: NSObject, MusicPlayerManagerDelegate, LyricsConsuming {
             currentLyrics?.filtrate()
             didChangeValue(forKey: "lyricsOffset")
             NotificationCenter.default.post(name: .currentLyricsChange, object: nil)
-            if currentLyrics?.metadata.source != .Local {
+            if currentLyrics?.metadata.localURL == nil {
                 currentLyrics?.saveToLocal()
             }
             currentLineIndex = nil
             timer?.fireDate = Date()
         }
     }
+    
+    var searchTask: LyricsSearchTask?
     
     var currentLineIndex: Int?
     
@@ -64,7 +67,6 @@ class AppController: NSObject, MusicPlayerManagerDelegate, LyricsConsuming {
     private override init() {
         super.init()
         playerManager.delegate = self
-        lyricsManager.consumer = self
         playerManager.preferredPlayerName = MusicPlayerName(index: defaults[.PreferredPlayerIndex])
         
         timer = Timer(timeInterval: 0.1, target: self, selector: #selector(updatePlayerPosition), userInfo: nil, repeats: true)
@@ -75,26 +77,25 @@ class AppController: NSObject, MusicPlayerManagerDelegate, LyricsConsuming {
     }
     
     func writeToiTunes(overwrite: Bool) {
-        guard let player = playerManager.player as? iTunes else {
+        guard let player = playerManager.player as? iTunes,
+            let currentLyrics = currentLyrics,
+            overwrite || player.currentLyrics?.isEmpty != false else {
             return
         }
-        guard let currentLyrics = currentLyrics else {
-            assertionFailure()
-            return
+        var content = currentLyrics.lines.map { line in
+            var content = line.content
+            if defaults[.WriteiTunesWithTranslation],
+                let translation = line.translation {
+                content += "\n" + translation
+            }
+            return content
+        }.joined(separator: "\n")
+        let regex = try! NSRegularExpression(pattern: "\\n{3}")
+        content = regex.stringByReplacingMatches(in: content, range: NSRange(location: 0, length: content.utf16.count), withTemplate: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
+        if let converter = ChineseConverter.shared {
+            content = converter.convert(content)
         }
-        if overwrite || player.currentLyrics == nil {
-            let lyrics = currentLyrics.lines.map { line in
-                var content = line.content
-                if defaults[.WriteiTunesWithTranslation],
-                    let translation = line.translation {
-                    content += "\n" + translation
-                }
-                return content
-            }.joined(separator: "\n")
-            let regex = try! NSRegularExpression(pattern: "\\n{3}")
-            let replaced = regex.stringByReplacingMatches(in: lyrics, range: NSRange(location: 0, length: lyrics.utf16.count), withTemplate: "\n\n")
-            player.currentLyrics = replaced.trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
-        }
+        player.currentLyrics = content
     }
     
     // MARK: MusicPlayerManagerDelegate
@@ -132,23 +133,61 @@ class AppController: NSObject, MusicPlayerManagerDelegate, LyricsConsuming {
             return
         }
         
-        // Load lyrics beside current track.
-        if defaults[.LoadLyricsBesideTrack],
-            let lrcURL = track.url?.deletingPathExtension().appendingPathExtension("lrc"),
-            let lrcContents = try? String(contentsOf: lrcURL, encoding: String.Encoding.utf8),
-            let lyrics = Lyrics(lrcContents) {
-            lyrics.metadata.source = .Local
-            lyrics.metadata.title = title
-            lyrics.metadata.artist = artist
-            currentLyrics = lyrics
-            return
+        var candidateLyricsURL: [(URL, Bool)] = []  // (fileURLWithoutExtension, isSecurityScoped)
+        
+        if defaults[.LoadLyricsBesideTrack] {
+            if let fileName = track.url?.deletingPathExtension() {
+                candidateLyricsURL += [
+                    (fileName.appendingPathExtension("lrcx"), false),
+                    (fileName.appendingPathExtension("lrc"), false),
+                ]
+            }
+        }
+        if let (url, security) = defaults.lyricsSavingPath() {
+            let titleForReading = title.replacingOccurrences(of: "/", with: "&")
+            let artistForReading = artist.replacingOccurrences(of: "/", with: "&")
+            let fileName = url.appendingPathComponent("\(artistForReading) - \(titleForReading)")
+            candidateLyricsURL += [
+                (fileName.appendingPathExtension("lrcx"), security),
+                (fileName.appendingPathExtension("lrc"), security),
+            ]     
         }
         
-        if let localLyrics = Lyrics.loadFromLocal(title: title, artist: artist) {
-            currentLyrics = localLyrics
-        } else {
+        for (url, security) in candidateLyricsURL {
+            if security {
+                guard url.startAccessingSecurityScopedResource() else {
+                    continue
+                }
+            }
+            defer {
+                if security {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+            
+            if let lrcContents = try? String(contentsOf: url, encoding: String.Encoding.utf8),
+                let lyrics = Lyrics(lrcContents) {
+                lyrics.metadata.localURL = url
+                lyrics.metadata.title = title
+                lyrics.metadata.artist = artist
+                currentLyrics = lyrics
+                break
+            }
+        }
+        
+        #if IS_FOR_MAS
+            guard defaults[.isInMASReview] == false else {
+                return
+            }
+            checkForMASReview()
+        #endif
+        
+        if currentLyrics == nil || currentLyrics?.metadata.localURL?.pathExtension == "lrc" {
             let duration = track.duration ?? 0
-            lyricsManager.iFeelLucky(title: title, artist: artist, duration: duration)
+            let req = LyricsSearchRequest(searchTerm: .info(title: title, artist: artist), title: title, artist: artist, duration: duration, limit: 5, timeout: 10)
+            let task = lyricsManager.searchLyrics(request: req, using: self.lyricsReceived)
+            searchTask = task
+            task.resume()
         }
     }
     
@@ -180,13 +219,6 @@ class AppController: NSObject, MusicPlayerManagerDelegate, LyricsConsuming {
     // MARK: LyricsSourceDelegate
     
     func lyricsReceived(lyrics: Lyrics) {
-        #if IS_FOR_MAS
-            guard defaults[.isInMASReview] == false else {
-                return
-            }
-            checkForMASReview()
-        #endif
-        
         let track = AppController.shared.playerManager.player?.currentTrack
         guard lyrics.metadata.title == track?.title ?? "",
             lyrics.metadata.artist == track?.artist ?? "" else {
@@ -194,10 +226,10 @@ class AppController: NSObject, MusicPlayerManagerDelegate, LyricsConsuming {
         }
         
         func shoudReplace(_ from: Lyrics, to: Lyrics) -> Bool {
-            if (from.metadata.source.rawValue == defaults[.PreferredLyricsSource]) != (to.metadata.source.rawValue == defaults[.PreferredLyricsSource]) {
-                return to.metadata.source.rawValue == defaults[.PreferredLyricsSource]
+            if (from.metadata.source?.rawValue == defaults[.PreferredLyricsSource]) != (to.metadata.source?.rawValue == defaults[.PreferredLyricsSource]) {
+                return to.metadata.source?.rawValue == defaults[.PreferredLyricsSource]
             }
-            return to > from
+            return to.quality > from.quality
         }
         
         if let current = currentLyrics, !shoudReplace(current, to: lyrics) {
@@ -205,10 +237,9 @@ class AppController: NSObject, MusicPlayerManagerDelegate, LyricsConsuming {
         }
         
         currentLyrics = lyrics
-    }
-    
-    func fetchCompleted(result: [Lyrics]) {
-        if defaults[.WriteToiTunesAutomatically] {
+        
+        if searchTask?.progress.isFinished == true,
+            defaults[.WriteToiTunesAutomatically] {
             writeToiTunes(overwrite: true)
         }
     }
@@ -219,7 +250,6 @@ extension AppController {
     func importLyrics(_ lyricsString: String) {
         if let lrc = Lyrics(lyricsString),
             let track = AppController.shared.playerManager.player?.currentTrack {
-            lrc.metadata.source = .Import
             lrc.metadata.title = track.title
             lrc.metadata.artist = track.artist
             currentLyrics = lrc
