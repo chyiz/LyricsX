@@ -65,10 +65,11 @@ class KaraokeLyricsWindowController: NSWindowController {
         lyricsView.bind(NSBindingName("fillColor"), to: defaults, withDefaultName: .DesktopLyricsBackgroundColor)
         lyricsView.bind(NSBindingName("shouldHideWithMouse"), to: defaults, withDefaultName: .HideLyricsWhenMousePassingBy)
         
-        window?.contentView?.bind(.hidden, to: defaults, withDefaultName: .DesktopLyricsEnabled, options: [.valueTransformerName: NSValueTransformerName.negateBooleanTransformerName])
+        let negateOption = [NSBindingOption.valueTransformerName: NSValueTransformerName.negateBooleanTransformerName]
+        window?.contentView?.bind(.hidden, to: defaults, withDefaultName: .DesktopLyricsEnabled, options: negateOption)
         
         defaultObservations += [
-            defaults.observe(.DisableLyricsWhenSreenShot, options: [.new, .initial]) { [weak self] defaults, change in
+            defaults.observe(.DisableLyricsWhenSreenShot, options: [.new, .initial]) { [weak self] _, change in
                 switch change.newValue {
                 case true: self?.window?.sharingType = .none
                 case false: self?.window?.sharingType = .readOnly
@@ -89,7 +90,7 @@ class KaraokeLyricsWindowController: NSWindowController {
                 .DesktopLyricsInsetTop,
                 .DesktopLyricsInsetBottom,
                 .DesktopLyricsInsetLeft,
-                .DesktopLyricsInsetRight,
+                .DesktopLyricsInsetRight
                 ], options: []) { [weak self] in
                     NSAnimationContext.runAnimationGroup({ context in
                         context.duration = 0.2
@@ -101,6 +102,7 @@ class KaraokeLyricsWindowController: NSWindowController {
             }
         ]
         
+        // swiftlint:disable:next discarded_notification_center_observer
         notifications += [NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
             if let mainScreen = NSScreen.main {
                 let frame = isFullScreen() == true ? mainScreen.frame : mainScreen.visibleFrame
@@ -133,7 +135,7 @@ class KaraokeLyricsWindowController: NSWindowController {
         if defaults[.DesktopLyricsOneLineMode] {
             secondLine = ""
         } else if defaults[.PreferBilingualLyrics] {
-            secondLine = lrc.translation ?? next?.content ?? ""
+            secondLine = lrc.attachments.translation() ?? next?.content ?? ""
         } else {
             secondLine = next?.content ?? ""
         }
@@ -146,40 +148,11 @@ class KaraokeLyricsWindowController: NSWindowController {
         DispatchQueue.main.async {
             self.lyricsView.displayLrc(firstLine, secondLine: secondLine)
             if let upperTextField = self.lyricsView.displayLine1,
-                let timeline = lrc.attachments[.timetag] as? LyricsLineAttachmentTimeLine,
+                let timetag = lrc.attachments.timetag,
                 let position = AppController.shared.playerManager.player?.playerPosition {
                 let timeDelay = AppController.shared.currentLyrics?.timeDelay ?? 0
-                let rectArray = upperTextField.rectArray
-                
-                var map = timeline.tags.map { tag -> (TimeInterval, CGFloat) in
-                    let dt = tag.timeTag + lrc.position - timeDelay - position
-                    let progress = tag.index == 0 ? 0 : rectArray[min(tag.index, rectArray.count) - 1].maxX
-                    return (dt, progress)
-                }
-                guard let i = map.index(where: { $0.0 > 0 }) else {
-                    upperTextField.dyeRect.frame = upperTextField.bounds
-                    return
-                }
-                if i > 0 {
-                    let progress = map[i-1].1 + CGFloat(map[i-1].0) * (map[i].1 - map[i-1].1) / CGFloat(map[i].0 - map[i-1].0)
-                    map.replaceSubrange(..<i, with: [(0, progress)])
-                }
-                if let duration = timeline.duration {
-                    let progress = rectArray.last!.maxX
-                    let dt = duration + lrc.position - timeDelay - position
-                    if dt > map.last!.0 {
-                        map.append((dt, progress))
-                    }
-                }
-                let duration = map.last!.0
-                let animation = CAKeyframeAnimation()
-                animation.keyTimes = map.map { ($0.0 / duration) as NSNumber }
-                animation.values = map.map { $0.1 }
-                animation.keyPath = "bounds.size.width"
-                animation.duration = duration
-                animation.fillMode = kCAFillModeForwards
-                animation.isRemovedOnCompletion = false
-                upperTextField.dyeRect.layer?.add(animation, forKey: "inlineProgress")
+                let progress = timetag.tags.map { ($0.timeTag + lrc.position - timeDelay - position, $0.index) }
+                upperTextField.addProgressAnimation(color: self.lyricsView.shadowColor, progress: progress)
             }
 
         }
@@ -222,11 +195,10 @@ func isFullScreen() -> Bool? {
     guard let windowInfoList = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] else {
         return nil
     }
-    for info in windowInfoList {
-        if info[kCGWindowOwnerName as String] as? String == "Window Server",
+    for info in windowInfoList where
+        info[kCGWindowOwnerName as String] as? String == "Window Server" &&
             info[kCGWindowName as String] as? String == "Menubar" {
-            return false
-        }
+                return false
     }
     return true
 }

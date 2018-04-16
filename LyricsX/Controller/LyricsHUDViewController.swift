@@ -20,12 +20,16 @@
 
 import Cocoa
 import MusicPlayer
+import GenericID
 
 class LyricsHUDViewController: NSViewController, NSWindowDelegate, ScrollLyricsViewDelegate, DragNDropDelegate {
     
     @IBOutlet weak var dragNDropView: DragNDropView!
     @IBOutlet weak var lyricsScrollView: ScrollLyricsView!
     @IBOutlet weak var noLyricsLabel: NSTextField!
+    
+    @IBOutlet weak var lyricsScrollViewTopMargin: NSLayoutConstraint!
+    @IBOutlet weak var lyricsScrollViewLeftMargin: NSLayoutConstraint!
     
     @objc dynamic var isTracking = true {
         didSet {
@@ -36,6 +40,7 @@ class LyricsHUDViewController: NSViewController, NSWindowDelegate, ScrollLyricsV
     }
     
     private var observations: [NSObjectProtocol] = []
+    private var defaltsObservation: DefaultsObservation?
     
     override func awakeFromNib() {
         view.window?.do {
@@ -44,6 +49,7 @@ class LyricsHUDViewController: NSViewController, NSWindowDelegate, ScrollLyricsV
             $0.styleMask.insert(.borderless)
             $0.delegate = self
         }
+        // swiftlint:disable:next force_cast
         let accessory = NSStoryboard.main!.instantiateController(withIdentifier: .LyricsHUDAccessory) as! NSTitlebarAccessoryViewController
         accessory.layoutAttribute = .right
         view.window?.addTitlebarAccessoryViewController(accessory)
@@ -57,21 +63,26 @@ class LyricsHUDViewController: NSViewController, NSWindowDelegate, ScrollLyricsV
         lyricsScrollView.bind(NSBindingName("textColor"), to: defaults, withDefaultName: .LyricsWindowTextColor)
         lyricsScrollView.bind(NSBindingName("highlightColor"), to: defaults, withDefaultName: .LyricsWindowHighlightColor)
         
+        defaltsObservation = defaults.observe(.LyricsWindowFontSize, options: [.new, .initial]) { [unowned self] (_, change) in
+            let fontSize = CGFloat(change.newValue)
+            self.lyricsScrollViewTopMargin.constant = fontSize
+            self.lyricsScrollViewLeftMargin.constant = fontSize
+            self.displayLyrics(animation: false)
+        }
+        
         let nc = NotificationCenter.default
+        // swiftlint:disable discarded_notification_center_observer
         observations += [
             nc.addObserver(forName: .lyricsShouldDisplay, object: nil, queue: nil) { [unowned self] _ in self.displayLyrics() },
             nc.addObserver(forName: .currentLyricsChange, object: nil, queue: nil) { [unowned self] _ in self.lyricsChanged() },
             nc.addObserver(forName: NSScrollView.willStartLiveScrollNotification, object: lyricsScrollView, queue: .main) { [unowned self] _ in self.isTracking = false }
         ]
+        // swiftlint:enable discarded_notification_center_observer
     }
     
     override func viewWillAppear() {
         noLyricsLabel.isHidden = AppController.shared.currentLyrics != nil
         displayLyrics(animation: false)
-    }
-    
-    override func viewDidDisappear() {
-        NotificationCenter.default.removeObserver(self)
     }
     
     deinit {
@@ -85,8 +96,9 @@ class LyricsHUDViewController: NSViewController, NSWindowDelegate, ScrollLyricsV
             let newLyrics = AppController.shared.currentLyrics
             self.lyricsScrollView.setupTextContents(lyrics: newLyrics)
             self.noLyricsLabel.isHidden = newLyrics != nil
+            self.displayLyrics(animation: false)
         }
-        displayLyrics(animation: false)
+        
     }
     
     func displayLyrics(animation: Bool = true) {

@@ -38,8 +38,8 @@ class KaraokeLyricsView: NSBox {
         }
     }
     
-    var displayLine1: DyeTextField?
-    var displayLine2: DyeTextField?
+    var displayLine1: NSTextField?
+    var displayLine2: NSTextField?
     
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -66,12 +66,12 @@ class KaraokeLyricsView: NSBox {
         cornerRadius = insetX / 2
     }
     
-    private func lyricsLabel(_ content: String) -> DyeTextField {
+    private func lyricsLabel(_ content: String) -> NSTextField {
         // TODO: reuse label
-        return DyeTextField(string: content).then {
+        return NSTextField(labelWithString: content).then {
             $0.bind(.font, to: self, withKeyPath: #keyPath(font))
             $0.bind(.textColor, to: self, withKeyPath: #keyPath(textColor))
-            $0.bind(.init("dyeColor"), to: self, withKeyPath: #keyPath(shadowColor))
+            $0.bind(.init("progressColor"), to: self, withKeyPath: #keyPath(shadowColor))
             $0.bind(.init("_shadowColor"), to: self, withKeyPath: #keyPath(shadowColor))
             $0.alphaValue = 0
             $0.isHidden = true
@@ -79,8 +79,8 @@ class KaraokeLyricsView: NSBox {
     }
     
     func displayLrc(_ firstLine: String, secondLine: String = "") {
-        var toBeHide = stackView.arrangedSubviews as! [DyeTextField]
-        var toBeShow: [DyeTextField] = []
+        var toBeHide = stackView.arrangedSubviews.compactMap { $0 as? NSTextField }
+        var toBeShow: [NSTextField] = []
         var shouldHideAll = false
         
         if firstLine.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -170,8 +170,9 @@ extension NSEvent {
     }
 }
 
-extension DyeTextField {
+extension NSTextField {
     
+    // swiftlint:disable:next identifier_name
     @objc dynamic var _shadowColor: NSColor? {
         get {
             return shadow?.shadowColor

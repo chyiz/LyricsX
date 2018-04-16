@@ -35,7 +35,6 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
     @objc dynamic var selectedIndex = NSIndexSet()
     
     let lyricsManager = LyricsProviderManager()
-    var searchRequest: LyricsSearchRequest?
     var searchTask: LyricsSearchTask?
     var searchResult: [Lyrics] = []
     
@@ -77,10 +76,14 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
         let duration = track?.duration ?? 0
         let title = track?.title ?? ""
         let artist = track?.artist ?? ""
-        let req = LyricsSearchRequest(searchTerm: .info(title: title, artist: artist), title: title, artist: artist, duration: duration, limit: 8, timeout: 10)
+        let req = LyricsSearchRequest(searchTerm: .info(title: title, artist: artist),
+                                      title: title,
+                                      artist: artist,
+                                      duration: duration,
+                                      limit: 8,
+                                      timeout: 10)
         let task = lyricsManager.searchLyrics(request: req, using: self.lyricsReceived)
         searchTask = task
-        searchRequest = req
         task.resume()
         tableView.reloadData()
     }
@@ -91,8 +94,8 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
         }
         
         if let id = AppController.shared.playerManager.player?.currentTrack?.id,
-            let i = defaults[.NoSearchingTrackIds].index(where: { $0 == id }) {
-            defaults[.NoSearchingTrackIds].remove(at: i)
+            let index = defaults[.NoSearchingTrackIds].index(where: { $0 == id }) {
+            defaults[.NoSearchingTrackIds].remove(at: index)
         }
         
         let lrc = searchResult[index]
@@ -105,7 +108,7 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
     // MARK: - LyricsSourceDelegate
     
     func lyricsReceived(lyrics: Lyrics) {
-        guard lyrics.metadata.request == searchRequest else {
+        guard lyrics.metadata.request == searchTask?.request else {
             return
         }
         if let idx = searchResult.index(where: { lyrics.quality > $0.quality }) {
@@ -167,7 +170,7 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
     }
     
     func tableView(_ tableView: NSTableView, namesOfPromisedFilesDroppedAtDestination dropDestination: URL, forDraggedRowsWith indexSet: IndexSet) -> [String] {
-        return indexSet.flatMap { index -> String? in
+        return indexSet.compactMap { index -> String? in
             let fileName = searchResult[index].fileName ?? "Unknown"
             
             let destURL = dropDestination.appendingPathComponent(fileName)

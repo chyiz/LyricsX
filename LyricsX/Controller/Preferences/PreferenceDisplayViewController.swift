@@ -22,8 +22,12 @@ import Cocoa
 
 class PreferenceDisplayViewController: NSViewController, NSWindowDelegate {
     
-    var karaokeFont = NSFont(name: defaults[.DesktopLyricsFontName], size: CGFloat(defaults[.DesktopLyricsFontSize])) ?? NSFont.labelFont(ofSize: CGFloat(defaults[.DesktopLyricsFontSize]))
-    var hudFont = NSFont(name: defaults[.LyricsWindowFontName], size: CGFloat(defaults[.LyricsWindowFontSize])) ?? NSFont.labelFont(ofSize: CGFloat(defaults[.LyricsWindowFontSize]))
+    var karaokeFont = NSFont(name: defaults[.DesktopLyricsFontName],
+                             size: CGFloat(defaults[.DesktopLyricsFontSize]))
+        ?? NSFont.labelFont(ofSize: CGFloat(defaults[.DesktopLyricsFontSize]))
+    var hudFont = NSFont(name: defaults[.LyricsWindowFontName],
+                         size: CGFloat(defaults[.LyricsWindowFontSize]))
+        ?? NSFont.labelFont(ofSize: CGFloat(defaults[.LyricsWindowFontSize]))
     
     // TODO: ugly code
     var isSettingKaraokeFont = true
@@ -47,13 +51,17 @@ class PreferenceDisplayViewController: NSViewController, NSWindowDelegate {
         }
         
         if isSettingKaraokeFont {
+            let previousFontFamily = karaokeFont.familyName
             karaokeFont = manager.convert(karaokeFont)
-            var fallback = defaults[.DesktopLyricsFontNameFallback]
-            if let index = fallback.index(of: defaults[.DesktopLyricsFontName]) {
-                fallback.remove(at: index)
+            if previousFontFamily != karaokeFont.familyName {
+                // guarantee different font family of font fallback
+                var fallback = defaults[.DesktopLyricsFontNameFallback]
+                if let index = fallback.index(of: defaults[.DesktopLyricsFontName]) {
+                    fallback.remove(at: index)
+                }
+                fallback.insert(defaults[.DesktopLyricsFontName], at: 0)
+                defaults[.DesktopLyricsFontNameFallback] = Array(fallback.prefix(fontNameFallbackCountMax))
             }
-            fallback.insert(defaults[.DesktopLyricsFontName], at: 0)
-            defaults[.DesktopLyricsFontNameFallback] = Array(fallback.prefix(fontNameFallbackCountMax))
             defaults[.DesktopLyricsFontName] = karaokeFont.fontName
             defaults[.DesktopLyricsFontSize] = Int(karaokeFont.pointSize)
         } else {
