@@ -188,7 +188,8 @@ class AppController: NSObject, MusicPlayerManagerDelegate {
             checkForMASReview()
         #endif
         
-        if currentLyrics == nil || currentLyrics?.metadata.localURL?.pathExtension == "lrc" {
+//        if currentLyrics == nil || currentLyrics?.metadata.localURL?.pathExtension == "lrc" {
+        if currentLyrics == nil {       // chyiz: do not replace existing lyrics
             let duration = track.duration ?? 0
             let req = LyricsSearchRequest(searchTerm: .info(title: title, artist: artist),
                                           title: title,
