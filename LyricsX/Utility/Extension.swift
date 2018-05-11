@@ -25,7 +25,7 @@ import MusicPlayer
 extension CountableRange {
     
     func clamp(_ value: Bound) -> Bound {
-        return Swift.min(upperBound, Swift.max(lowerBound, value))
+        return Swift.min(upperBound.advanced(by: -1), Swift.max(lowerBound, value))
     }
 }
 
@@ -86,7 +86,7 @@ extension UserDefaults {
 
 extension UserDefaults {
     
-    func lyricsSavingPath() -> (URL, security: Bool)? {
+    func lyricsSavingPath() -> (URL, security: Bool) {
         if self[.LyricsSavingPathPopUpIndex] != 0, let path = lyricsCustomSavingPath {
             return (path, true)
         } else {
@@ -135,10 +135,8 @@ extension Lyrics {
 
 extension Lyrics {
     
-    func saveToLocal() {
-        guard let (url, security) = defaults.lyricsSavingPath() else {
-            return
-        }
+    func persist() {
+        let (url, security) = defaults.lyricsSavingPath()
         if security {
             guard url.startAccessingSecurityScopedResource() else {
                 return
@@ -170,6 +168,7 @@ extension Lyrics {
             }
             try description.write(to: lrcFileURL, atomically: true, encoding: .utf8)
             metadata.localURL = lrcFileURL
+            metadata.needsPersist = false
         } catch {
             log(error.localizedDescription)
             return

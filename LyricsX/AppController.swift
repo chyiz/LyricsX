@@ -41,9 +41,6 @@ class AppController: NSObject, MusicPlayerManagerDelegate {
             didChangeValue(forKey: "lyricsOffset")
             currentLineIndex = nil
             NotificationCenter.default.post(name: .currentLyricsChange, object: nil)
-            if currentLyrics?.metadata.localURL == nil {
-                currentLyrics?.saveToLocal()
-            }
             timer?.fireDate = Date()
         }
     }
@@ -60,7 +57,7 @@ class AppController: NSObject, MusicPlayerManagerDelegate {
         }
         set {
             currentLyrics?.offset = newValue
-            currentLyrics?.saveToLocal()
+            currentLyrics?.metadata.needsPersist = true
             timer?.fireDate = Date()
         }
     }
@@ -125,6 +122,9 @@ class AppController: NSObject, MusicPlayerManagerDelegate {
     }
     
     func currentTrackChanged(track: MusicTrack?) {
+        if currentLyrics?.metadata.needsPersist == true {
+            currentLyrics?.persist()
+        }
         currentLyrics = nil
         currentLineIndex = nil
         guard let track = track else {
@@ -148,15 +148,15 @@ class AppController: NSObject, MusicPlayerManagerDelegate {
                 ]
             }
         }
-        if let (url, security) = defaults.lyricsSavingPath() {
-            let titleForReading = title.replacingOccurrences(of: "/", with: "&")
-            let artistForReading = artist.replacingOccurrences(of: "/", with: "&")
-            let fileName = url.appendingPathComponent("\(artistForReading) - \(titleForReading)")
-            candidateLyricsURL += [
-                (fileName.appendingPathExtension("lrcx"), security),
-                (fileName.appendingPathExtension("lrc"), security)
-            ]
-        }
+
+        let (url, security) = defaults.lyricsSavingPath()
+        let titleForReading = title.replacingOccurrences(of: "/", with: "&")
+        let artistForReading = artist.replacingOccurrences(of: "/", with: "&")
+        let fileName = url.appendingPathComponent("\(artistForReading) - \(titleForReading)")
+        candidateLyricsURL += [
+            (fileName.appendingPathExtension("lrcx"), security),
+            (fileName.appendingPathExtension("lrc"), security)
+        ]
         
         for (url, security) in candidateLyricsURL {
             if security {
@@ -240,7 +240,8 @@ class AppController: NSObject, MusicPlayerManagerDelegate {
         
         // swiftlint:disable:next identifier_name
         func shoudReplace(_ from: Lyrics, to: Lyrics) -> Bool {
-            if (from.metadata.source?.rawValue == defaults[.PreferredLyricsSource]) != (to.metadata.source?.rawValue == defaults[.PreferredLyricsSource]) {
+            if (from.metadata.source?.rawValue == defaults[.PreferredLyricsSource]) !=
+                (to.metadata.source?.rawValue == defaults[.PreferredLyricsSource]) {
                 return to.metadata.source?.rawValue == defaults[.PreferredLyricsSource]
             }
             return to.quality > from.quality
@@ -250,6 +251,7 @@ class AppController: NSObject, MusicPlayerManagerDelegate {
             return
         }
         
+        lyrics.metadata.needsPersist = true
         currentLyrics = lyrics
         
         if searchTask?.progress.isFinished == true,
@@ -262,10 +264,12 @@ class AppController: NSObject, MusicPlayerManagerDelegate {
 extension AppController {
     
     func importLyrics(_ lyricsString: String) {
+        // TODO: user feedback
         if let lrc = Lyrics(lyricsString),
             let track = AppController.shared.playerManager.player?.currentTrack {
             lrc.metadata.title = track.title
             lrc.metadata.artist = track.artist
+            lrc.metadata.needsPersist = true
             currentLyrics = lrc
         }
     }

@@ -19,6 +19,7 @@
 //
 
 import Cocoa
+import Crashlytics
 import GenericID
 import MusicPlayer
 
@@ -75,11 +76,19 @@ class LyricsHUDViewController: NSViewController, NSWindowDelegate, ScrollLyricsV
         let nc = NotificationCenter.default
         // swiftlint:disable discarded_notification_center_observer
         observations += [
-            nc.addObserver(forName: .lyricsShouldDisplay, object: nil, queue: nil) { [unowned self] _ in self.displayLyrics() },
-            nc.addObserver(forName: .currentLyricsChange, object: nil, queue: nil) { [unowned self] _ in self.lyricsChanged() },
-            nc.addObserver(forName: NSScrollView.willStartLiveScrollNotification, object: lyricsScrollView, queue: .main) { [unowned self] _ in self.isTracking = false }
+            nc.addObserver(forName: .lyricsShouldDisplay,
+                           object: nil,
+                           queue: nil) { [unowned self] _ in self.displayLyrics() },
+            nc.addObserver(forName: .currentLyricsChange,
+                           object: nil,
+                           queue: nil) { [unowned self] _ in self.lyricsChanged() },
+            nc.addObserver(forName: NSScrollView.willStartLiveScrollNotification,
+                           object: lyricsScrollView,
+                           queue: .main) { [unowned self] _ in self.isTracking = false }
         ]
         // swiftlint:enable discarded_notification_center_observer
+        
+        Answers.logCustomEvent(withName: "Show Lyrics Window")
     }
     
     override func viewWillAppear() {
@@ -130,6 +139,7 @@ class LyricsHUDViewController: NSViewController, NSWindowDelegate, ScrollLyricsV
         let pos = position - (AppController.shared.currentLyrics?.timeDelay ?? 0)
         AppController.shared.playerManager.player?.playerPosition = pos
         isTracking = true
+        Answers.logCustomEvent(withName: "Seek to Lyrics Line")
     }
     
     func scrollWheelDidStartScroll() {

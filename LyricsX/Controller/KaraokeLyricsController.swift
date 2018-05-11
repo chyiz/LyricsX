@@ -32,19 +32,26 @@ class KaraokeLyricsWindowController: NSWindowController {
     var defaultObservations: [DefaultsObservation] = []
     var notifications: [NSObjectProtocol] = []
     
-    override func windowDidLoad() {
-        window?.do {
-            if let frame = $0.screen?.visibleFrame {
-                $0.setFrame(frame, display: false)
-            }
-            $0.backgroundColor = .clear
-            $0.isOpaque = false
-            $0.ignoresMouseEvents = true
-            $0.level = .floating
-            $0.collectionBehavior = [.canJoinAllSpaces, .stationary]
+    var screen: NSScreen {
+        didSet {
+            defaults[.DesktopLyricsScreenRect] = screen.frame
+            updateWindowFrame()
         }
+    }
+    
+    init() {
+        let rect = defaults[.DesktopLyricsScreenRect]
+        screen = NSScreen.screens.first { $0.frame.contains(rect) } ?? NSScreen.main!
+        let window = NSWindow(contentRect: screen.visibleFrame, styleMask: .borderless, backing: .buffered, defer: true)
+        super.init(window: window)
+        window.backgroundColor = .clear
+        window.hasShadow = false
+        window.isOpaque = false
+        window.ignoresMouseEvents = true
+        window.level = .floating
+        window.collectionBehavior = [.canJoinAllSpaces, .stationary]
         
-        window?.contentView?.addSubview(lyricsView)
+        window.contentView?.addSubview(lyricsView)
         
         addObserver()
         makeConstraints()
@@ -56,6 +63,10 @@ class KaraokeLyricsWindowController: NSWindowController {
             NotificationCenter.default.addObserver(self, selector: #selector(self.handleLyricsDisplay), name: .lyricsShouldDisplay, object: nil)
             NotificationCenter.default.addObserver(self, selector: #selector(self.handleLyricsDisplay), name: .currentLyricsChange, object: nil)
         }
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
     }
     
     private func addObserver() {
@@ -103,11 +114,13 @@ class KaraokeLyricsWindowController: NSWindowController {
         
         // swiftlint:disable:next discarded_notification_center_observer
         notifications += [NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
-            if let screen = self?.window?.screen {
-                let frame = isFullScreen() == true ? screen.frame : screen.visibleFrame
-                self?.window?.setFrame(frame, display: false, animate: true)
-            }
+            self?.updateWindowFrame()
         }]
+    }
+    
+    func updateWindowFrame() {
+        let frame = isFullScreen() == true ? screen.frame : screen.visibleFrame
+        window?.setFrame(frame, display: false, animate: true)
     }
     
     @objc func handleLyricsDisplay() {

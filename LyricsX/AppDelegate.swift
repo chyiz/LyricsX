@@ -52,16 +52,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             Fabric.with([Crashlytics.self])
         #endif
         
-        // swiftlint:disable:next force_cast
-        desktopLyrics = (NSStoryboard.main!.instantiateController(withIdentifier: .DesktopLyricsWindow) as! KaraokeLyricsWindowController)
+        desktopLyrics = KaraokeLyricsWindowController()
         desktopLyrics?.showWindow(nil)
         
         MenuBarLyrics.shared.statusItem.target = self
         MenuBarLyrics.shared.statusItem.action = #selector(clickMenuBarItem)
         
         let controller = AppController.shared
-        lyricsOffsetStepper.bind(.value, to: controller, withKeyPath: #keyPath(AppController.lyricsOffset), options: [.continuouslyUpdatesValue: true])
-        lyricsOffsetTextField.bind(.value, to: controller, withKeyPath: #keyPath(AppController.lyricsOffset), options: [.continuouslyUpdatesValue: true])
+        lyricsOffsetStepper.bind(.value,
+                                 to: controller,
+                                 withKeyPath: #keyPath(AppController.lyricsOffset),
+                                 options: [.continuouslyUpdatesValue: true])
+        lyricsOffsetTextField.bind(.value,
+                                   to: controller,
+                                   withKeyPath: #keyPath(AppController.lyricsOffset),
+                                   options: [.continuouslyUpdatesValue: true])
         
         setupShortcuts()
         
@@ -86,7 +91,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func applicationWillTerminate(_ aNotification: Notification) {
-        UserDefaults.standard.synchronize()
+        if AppController.shared.currentLyrics?.metadata.needsPersist == true {
+            AppController.shared.currentLyrics?.persist()
+        }
         if defaults[.LaunchAndQuitWithPlayer] {
             let url = Bundle.main.bundleURL.appendingPathComponent("Contents/Library/LoginItems/LyricsXHelper.app")
             groupDefaults[.launchHelperTime] = Date()
@@ -177,6 +184,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if defaults[.WriteToiTunesAutomatically] {
             (AppController.shared.playerManager.player as? iTunes)?.currentLyrics = ""
         }
+        if let url = AppController.shared.currentLyrics?.metadata.localURL {
+            try? FileManager.default.removeItem(at: url)
+        }
         AppController.shared.currentLyrics = nil
     }
     
@@ -191,7 +201,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         defaults.register(defaults: [
             .DesktopLyricsColor: #colorLiteral(red: 1, green: 1, blue: 1, alpha: 1),
-            .DesktopLyricsShadowColor: #colorLiteral(red: 0, green: 0.9914394021, blue: 1, alpha: 1),
+            .DesktopLyricsShadowColor: #colorLiteral(red: 0, green: 1, blue: 0.8333333333, alpha: 1),
             .DesktopLyricsBackgroundColor: #colorLiteral(red: 0, green: 0, blue: 0, alpha: 0.6041579279),
             .LyricsWindowTextColor: #colorLiteral(red: 0.7540688515, green: 0.7540867925, blue: 0.7540771365, alpha: 1),
             .LyricsWindowHighlightColor: #colorLiteral(red: 0.8866666667, green: 1, blue: 0.8, alpha: 1),
