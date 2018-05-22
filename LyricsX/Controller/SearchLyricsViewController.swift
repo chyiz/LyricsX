@@ -124,6 +124,9 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
         
         let lrc = searchResult[index]
         AppController.shared.currentLyrics = lrc
+        
+        AppController.shared.currentLyrics?.metadata.needsPersist = true
+        
         if defaults[.WriteToiTunesAutomatically] {
             AppController.shared.writeToiTunes(overwrite: true)
         }
