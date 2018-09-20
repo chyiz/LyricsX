@@ -22,13 +22,17 @@ import Cocoa
 import GenericID
 import MusicPlayer
 
+let fontNameFallbackCountMax = 1
+
 // NOTE: to build your own product, you need to replace the team identifier to yours
 // and do the same thing in LyricsXHelper
 let lyricsXGroupIdentifier = "3665V726AE.group.ddddxxx.LyricsX"
 let lyricsXHelperIdentifier = "ddddxxx.LyricsXHelper"
+let lyricsXErrorDomain = "ddddxxx.LyricsX"
 
 let defaults = UserDefaults.standard
 let groupDefaults = UserDefaults(suiteName: lyricsXGroupIdentifier)!
+let workspaceNC = NSWorkspace.shared.notificationCenter
 
 let isInSandbox = ProcessInfo.processInfo.environment["APP_SANDBOX_CONTAINER_ID"] != nil
 let isFromMacAppStore = (try? Bundle.main.appStoreReceiptURL?.checkResourceIsReachable()) ?? nil == true
@@ -37,8 +41,21 @@ extension CAMediaTimingFunction {
     static let mystery = CAMediaTimingFunction(controlPoints: 0.2, 0.1, 0.2, 1)
 }
 
-func log(_ message: @autoclosure () -> String, file: StaticString = #file, line: UInt = #line) {
-    NSLog("\(file):\(line): \(message())")
+func log(_ message: @autoclosure () -> String, file: String = #file, line: UInt = #line) {
+    let fileName = (file as NSString).lastPathComponent
+    // Adding prefix to distinguish from ton of AppleEvent error log.
+    NSLog("CustomLog:\(fileName):\(line): \(message())")
+}
+
+// MARK: - Identifier
+
+extension NSUserInterfaceItemIdentifier {
+    static let WriteToiTunes = NSUserInterfaceItemIdentifier("MainMenu.WriteToiTunes")
+    static let LyricsMenu = NSUserInterfaceItemIdentifier("MainMenu.Lyrics")
+    
+    static let searchResultColumnTitle = NSUserInterfaceItemIdentifier("SearchResult.TableColumn.Title")
+    static let searchResultColumnArtist = NSUserInterfaceItemIdentifier("SearchResult.TableColumn.Artist")
+    static let searchResultColumnSource = NSUserInterfaceItemIdentifier("SearchResult.TableColumn.Source")
 }
 
 extension NSStoryboard.SceneIdentifier {
@@ -46,17 +63,12 @@ extension NSStoryboard.SceneIdentifier {
     static let LyricsHUDAccessory = NSStoryboard.SceneIdentifier("LyricsHUDAccessory")
 }
 
-// MARK: - Notification Name
-
-let lyricsShouldDisplayNotification = "LyricsShouldDisplayNotification"
-let currentLyricsChangeNotification = "CurrentLyricsChangeNotification"
+// MARK: Notification Name
 
 extension Notification.Name {
-    static let lyricsShouldDisplay = Notification.Name(lyricsShouldDisplayNotification)
-    static let currentLyricsChange = Notification.Name(currentLyricsChangeNotification)
+    static let lyricsShouldDisplay = Notification.Name("LyricsShouldDisplayNotification")
+    static let currentLyricsChange = Notification.Name("CurrentLyricsChangeNotification")
 }
-
-let fontNameFallbackCountMax = 1
 
 // MARK: - User Defaults
 
@@ -68,6 +80,7 @@ extension UserDefaults.DefaultsKeys {
     // Menu
     static let DesktopLyricsEnabled = Key<Bool>("DesktopLyricsEnabled")
     static let MenuBarLyricsEnabled = Key<Bool>("MenuBarLyricsEnabled")
+    static let TouchBarLyricsEnabled = Key<Bool>("TouchBarLyricsEnabled")
     
     // General
     static let PreferredPlayerIndex = Key<Int>("PreferredPlayerIndex")
@@ -87,19 +100,13 @@ extension UserDefaults.DefaultsKeys {
     static let DisableLyricsWhenSreenShot = Key<Bool>("DisableLyricsWhenSreenShot")
     
     // Display
-    static let DesktopLyricsScreenRect = Key<CGRect>.init("DesktopLyricsScreenRect", transformer: .json)
+    static let DesktopLyricsScreenRect = Key<CGRect>("DesktopLyricsScreenRect", transformer: .json)
     static let DesktopLyricsOneLineMode = Key<Bool>("DesktopLyricsOneLineMode")
     static let DesktopLyricsVerticalMode = Key<Bool>("DesktopLyricsVerticalMode")
+    static let DesktopLyricsDraggable = Key<Bool>("DesktopLyricsDraggable")
     
-    static let DesktopLyricsInsetTopEnabled = Key<Bool>("DesktopLyricsInsetTopEnabled")
-    static let DesktopLyricsInsetBottomEnabled = Key<Bool>("DesktopLyricsInsetBottomEnabled")
-    static let DesktopLyricsInsetLeftEnabled = Key<Bool>("DesktopLyricsInsetLeftEnabled")
-    static let DesktopLyricsInsetRightEnabled = Key<Bool>("DesktopLyricsInsetRightEnabled")
-    
-    static let DesktopLyricsInsetTop = Key<Int>("DesktopLyricsInsetTop")
-    static let DesktopLyricsInsetBottom = Key<Int>("DesktopLyricsInsetBottom")
-    static let DesktopLyricsInsetLeft = Key<Int>("DesktopLyricsInsetLeft")
-    static let DesktopLyricsInsetRight = Key<Int>("DesktopLyricsInsetRight")
+    static let DesktopLyricsXPositionFactor = Key<CGFloat>("DesktopLyricsXPositionFactor")
+    static let DesktopLyricsYPositionFactor = Key<CGFloat>("DesktopLyricsYPositionFactor")
     
     static let DesktopLyricsEnableFurigana = Key<Bool>("DesktopLyricsEnableFurigana")
     
@@ -108,6 +115,7 @@ extension UserDefaults.DefaultsKeys {
     static let DesktopLyricsFontNameFallback = Key<[String]>("DesktopLyricsFontNameFallback")
     
     static let DesktopLyricsColor = Key<NSColor>("DesktopLyricsColor", transformer: .keyedArchive)
+    static let DesktopLyricsProgressColor = Key<NSColor>("DesktopLyricsProgressColor", transformer: .keyedArchive)
     static let DesktopLyricsShadowColor = Key<NSColor>("DesktopLyricsShadowColor", transformer: .keyedArchive)
     static let DesktopLyricsBackgroundColor = Key<NSColor>("DesktopLyricsBackgroundColor", transformer: .keyedArchive)
     
@@ -119,6 +127,9 @@ extension UserDefaults.DefaultsKeys {
     static let LyricsWindowHighlightColor = Key<NSColor>("LyricsWindowHighlightColor", transformer: .keyedArchive)
     
     // Shortcut
+    static let ShortcutToggleMenuBarLyrics = Key<String>("ShortcutToggleMenuBarLyrics")
+    static let ShortcutToggleKaraokeLyrics = Key<String>("ShortcutToggleKaraokeLyrics")
+    static let ShortcutShowLyricsWindow = Key<String>("ShortcutShowLyricsWindow")
     static let ShortcutOffsetIncrease = Key<String>("ShortcutOffsetIncrease")
     static let ShortcutOffsetDecrease = Key<String>("ShortcutOffsetDecrease")
     static let ShortcutWriteToiTunes = Key<String>("ShortcutWriteToiTunes")
@@ -137,10 +148,13 @@ extension UserDefaults.DefaultsKeys {
     static let LyricsSources = Key<[String]>("LyricsSources")
     static let PreferredLyricsSource = Key<String?>("PreferredLyricsSource")
     
+    static let GlobalLyricsOffset = Key<Int>("GlobalLyricsOffset")
+    
     //
     static let isInMASReview = Key<Bool?>("isInMASReview")
     
     static let launchHelperTime = Key<Date?>("launchHelperTime")
 }
 
+extension CGFloat: UDDefaultConstructible {}
 extension CGRect: UDDefaultConstructible {}

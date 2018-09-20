@@ -33,7 +33,6 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
             searchButton.isEnabled = !searchTitle.isEmpty
         }
     }
-    @objc dynamic var selectedIndex = NSIndexSet()
     
     let lyricsManager = LyricsProviderManager()
     var searchTask: LyricsSearchTask?
@@ -44,6 +43,7 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
     @IBOutlet weak var tableView: NSTableView!
     @IBOutlet weak var searchButton: NSButton!
     @IBOutlet weak var progressIndicator: NSProgressIndicator!
+    // NSTextView doesn't support weak references
     @IBOutlet var lyricsPreviewTextView: NSTextView!
     
     @IBOutlet weak var hideLrcPreviewConstraint: NSLayoutConstraint?
@@ -112,7 +112,7 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
         Answers.logCustomEvent(withName: "Search Lyrics Manually")
     }
     
-    @IBAction func useLyricsAction(_ sender: NSButton) {
+    @IBAction func useLyricsAction(_ sender: Any) {
         guard let index = tableView.selectedRowIndexes.first else {
             return
         }
@@ -267,10 +267,4 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
         }
     }
     
-}
-
-extension NSUserInterfaceItemIdentifier {
-    fileprivate static let searchResultColumnTitle = NSUserInterfaceItemIdentifier("Title")
-    fileprivate static let searchResultColumnArtist = NSUserInterfaceItemIdentifier("Artist")
-    fileprivate static let searchResultColumnSource = NSUserInterfaceItemIdentifier("Source")
 }

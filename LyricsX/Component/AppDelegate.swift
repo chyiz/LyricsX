@@ -21,12 +21,13 @@
 import Cocoa
 import Crashlytics
 import Fabric
+import GenericID
 import MASShortcut
 import MusicPlayer
 import ServiceManagement
 
 @NSApplicationMain
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     
     static var shared: AppDelegate? {
         return NSApplication.shared.delegate as? AppDelegate
@@ -37,6 +38,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @IBOutlet weak var statusBarMenu: NSMenu!
     
     var desktopLyrics: KaraokeLyricsWindowController?
+    
+    var touchBarLyrics: Any?
     
     lazy var searchLyricsWC: NSWindowController = {
         // swiftlint:disable:next force_cast
@@ -52,13 +55,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             Fabric.with([Crashlytics.self])
         #endif
         
+        let controller = AppController.shared
+        
         desktopLyrics = KaraokeLyricsWindowController()
         desktopLyrics?.showWindow(nil)
         
-        MenuBarLyrics.shared.statusItem.target = self
-        MenuBarLyrics.shared.statusItem.action = #selector(clickMenuBarItem)
+        MenuBarLyrics.shared.statusItem.menu = statusBarMenu
+        statusBarMenu.delegate = self
         
-        let controller = AppController.shared
         lyricsOffsetStepper.bind(.value,
                                  to: controller,
                                  withKeyPath: #keyPath(AppController.lyricsOffset),
@@ -75,17 +79,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             log("Failed to set login item enabled")
         }
         
-        let sharedKeys = [
-            UserDefaults.DefaultsKeys.LaunchAndQuitWithPlayer.key,
-            UserDefaults.DefaultsKeys.PreferredPlayerIndex.key
+        let sharedKeys: [UserDefaults.DefaultsKeys] = [
+            .LaunchAndQuitWithPlayer,
+            .PreferredPlayerIndex,
         ]
         sharedKeys.forEach {
-            groupDefaults.bind(NSBindingName($0), to: defaults, withKeyPath: $0)
+            groupDefaults.bind(NSBindingName($0.key), withDefaultName: $0)
         }
         
         #if IS_FOR_MAS
             checkForMASReview(force: true)
         #else
+            if #available(OSX 10.12.2, *) {
+                observeDefaults(key: .TouchBarLyricsEnabled, options: [.new, .initial]) { [unowned self] _, change in
+                    if change.newValue, self.touchBarLyrics == nil {
+                        self.touchBarLyrics = TouchBarLyrics()
+                    } else if !change.newValue, self.touchBarLyrics != nil {
+                        self.touchBarLyrics = nil
+                    }
+                }
+            }
             checkForUpdate()
         #endif
     }
@@ -106,54 +119,44 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
-    override func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
-        switch menuItem.identifier {
-        case .WriteToiTunes?:
-            return AppController.shared.playerManager.player is iTunes && AppController.shared.currentLyrics != nil
-        case .WrongLyrics?:
-            return AppController.shared.currentLyrics != nil
-        default:
-            return true
-        }
-    }
-    
     private func setupShortcuts() {
         let binder = MASShortcutBinder.shared()!
-        binder.bindShortcut(with: .ShortcutOffsetIncrease) {
-            self.increaseOffset(nil)
-        }
-        binder.bindShortcut(with: .ShortcutOffsetDecrease) {
-            self.decreaseOffset(nil)
-        }
-        binder.bindShortcut(with: .ShortcutWriteToiTunes) {
-            self.writeToiTunes(nil)
-        }
-        binder.bindShortcut(with: .ShortcutWrongLyrics) {
-            self.wrongLyrics(nil)
-        }
-        binder.bindShortcut(with: .ShortcutSearchLyrics) {
-            self.searchLyrics(nil)
+        binder.bindBoolShortcut(.ShortcutToggleMenuBarLyrics, target: .MenuBarLyricsEnabled)
+        binder.bindBoolShortcut(.ShortcutToggleKaraokeLyrics, target: .DesktopLyricsEnabled)
+        binder.bindShortcut(.ShortcutShowLyricsWindow, to: self.showLyricsHUD)
+        binder.bindShortcut(.ShortcutOffsetIncrease, to: self.increaseOffset)
+        binder.bindShortcut(.ShortcutOffsetDecrease, to: self.decreaseOffset)
+        binder.bindShortcut(.ShortcutWriteToiTunes, to: self.writeToiTunes)
+        binder.bindShortcut(.ShortcutWrongLyrics, to: self.wrongLyrics)
+        binder.bindShortcut(.ShortcutSearchLyrics, to: self.searchLyrics)
+    }
+    
+    // MARK: - NSMenuDelegate
+    
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.iterateItem { item in
+            guard let identifier = item.identifier else { return }
+            switch identifier {
+            case .WriteToiTunes:
+                item.isEnabled = AppController.shared.playerManager.player is iTunes && AppController.shared.currentLyrics != nil
+            case .LyricsMenu:
+                item.isEnabled = AppController.shared.currentLyrics != nil
+            default:
+                break
+            }
         }
     }
     
     // MARK: - Menubar Action
     
-    @IBAction func clickMenuBarItem(_ sender: NSStatusItem) {
-        #if IS_FOR_MAS
-            let isInMASReview = defaults[.isInMASReview] != false
-            statusBarMenu.item(withTag: 201)?.isHidden = isInMASReview
-            // search lyrics
-            statusBarMenu.item(withTag: 401)?.isHidden = isInMASReview || isFromMacAppStore
-            // check for update
-            statusBarMenu.item(withTag: 402)?.isHidden = isInMASReview
-            // donate
-            checkForMASReview()
-        #endif
-        
-        statusBarMenu.item(withTag: 202)?.isHidden = !(AppController.shared.playerManager.player is iTunes)
-        // write to iTunes
-        
-        MenuBarLyrics.shared.statusItem.popUpMenu(statusBarMenu)
+    var lyricsHUD: NSWindowController?
+    
+    @IBAction func showLyricsHUD(_ sender: Any?) {
+        // swiftlint:disable:next force_cast
+        let controller = lyricsHUD ?? NSStoryboard.main?.instantiateController(withIdentifier: .init("LyricsHUD")) as! NSWindowController
+        controller.showWindow(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        lyricsHUD = controller
     }
     
     @IBAction func checkUpdateAction(_ sender: Any) {
@@ -166,6 +169,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     @IBAction func decreaseOffset(_ sender: Any?) {
         AppController.shared.lyricsOffset -= 100
+    }
+    
+    @IBAction func showCurrentLyricsInFinder(_ sender: Any?) {
+        guard let lyrics = AppController.shared.currentLyrics else {
+            return
+        }
+        if lyrics.metadata.needsPersist {
+            lyrics.persist()
+        }
+        if let url = lyrics.metadata.localURL {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
     }
     
     @IBAction func writeToiTunes(_ sender: Any?) {
@@ -201,25 +216,46 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         defaults.register(defaults: [
             .DesktopLyricsColor: #colorLiteral(red: 1, green: 1, blue: 1, alpha: 1),
+            .DesktopLyricsProgressColor: #colorLiteral(red: 0.1985405816, green: 1, blue: 0.8664234302, alpha: 1),
             .DesktopLyricsShadowColor: #colorLiteral(red: 0, green: 1, blue: 0.8333333333, alpha: 1),
             .DesktopLyricsBackgroundColor: #colorLiteral(red: 0, green: 0, blue: 0, alpha: 0.6041579279),
             .LyricsWindowTextColor: #colorLiteral(red: 0.7540688515, green: 0.7540867925, blue: 0.7540771365, alpha: 1),
             .LyricsWindowHighlightColor: #colorLiteral(red: 0.8866666667, green: 1, blue: 0.8, alpha: 1),
             .PreferBilingualLyrics: isZh,
-            .ChineseConversionIndex: isHant ? 2 : 0
+            .ChineseConversionIndex: isHant ? 2 : 0,
+            .DesktopLyricsXPositionFactor: 0.5,
+            .DesktopLyricsYPositionFactor: 0.95,
             ])
     }
 }
 
-extension NSUserInterfaceItemIdentifier {
+extension NSMenu {
     
-    fileprivate static let WriteToiTunes = NSUserInterfaceItemIdentifier("WriteToiTunes")
-    fileprivate static let WrongLyrics = NSUserInterfaceItemIdentifier("WrongLyrics")
+    func iterateItem(recursive: Bool = true, _ block: (NSMenuItem) -> Void) {
+        for item in items {
+            block(item)
+            if recursive, item.hasSubmenu {
+                item.submenu?.iterateItem(block)
+            }
+        }
+    }
 }
 
 extension MASShortcutBinder {
     
-    func bindShortcut<T>(with defaultsKay: UserDefaults.DefaultsKey<T>, to action: @escaping () -> Void) {
+    func bindShortcut<T>(_ defaultsKay: UserDefaults.DefaultsKey<T>, to action: @escaping () -> Void) {
         bindShortcut(withDefaultsKey: defaultsKay.key, toAction: action)
+    }
+    
+    func bindShortcut<T, U>(_ defaultsKay: UserDefaults.DefaultsKey<T>, to action: @escaping (U?) -> Void) {
+        bindShortcut(withDefaultsKey: defaultsKay.key) {
+            action(nil)
+        }
+    }
+    
+    func bindBoolShortcut<T>(_ defaultsKay: UserDefaults.DefaultsKey<T>, target: UserDefaults.DefaultsKey<Bool>) {
+        bindShortcut(withDefaultsKey: defaultsKay.key) {
+            defaults[target] = !defaults[target]
+        }
     }
 }

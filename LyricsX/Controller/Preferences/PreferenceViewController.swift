@@ -1,5 +1,5 @@
 //
-//  PreferenceShortcutViewController.swift
+//  PreferenceViewController.swift
 //
 //  This file is part of LyricsX
 //  Copyright (C) 2017 Xander Deng - https://github.com/ddddxxx/LyricsX
@@ -19,9 +19,15 @@
 //
 
 import Cocoa
-import GenericID
-import MASShortcut
 
-class PreferenceShortcutViewController: NSViewController {
+class PreferenceViewController: NSTabViewController {
     
+    override func viewWillAppear() {
+        #if IS_FOR_MAS
+            if defaults[.isInMASReview] != false {
+                removeTabViewItem(tabViewItems.last!)
+            }
+            checkForMASReview()
+        #endif
+    }
 }

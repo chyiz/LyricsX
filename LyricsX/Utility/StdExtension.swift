@@ -20,10 +20,31 @@
 
 import Foundation
 
-extension CountableRange {
+extension Comparable {
     
-    func clamp(_ value: Bound) -> Bound {
-        return Swift.min(upperBound.advanced(by: -1), Swift.max(lowerBound, value))
+    func clamped(to limit: ClosedRange<Self>) -> Self {
+        return min(max(self, limit.lowerBound), limit.upperBound)
+    }
+    
+    func clamped(to limit: PartialRangeThrough<Self>) -> Self {
+        return min(self, limit.upperBound)
+    }
+    
+    func clamped(to limit: PartialRangeFrom<Self>) -> Self {
+        return max(self, limit.lowerBound)
+    }
+}
+
+extension Strideable {
+    
+    func clamped(to limit: Range<Self>) -> Self {
+        let upperBound = limit.upperBound.advanced(by: -1)
+        return min(max(self, limit.lowerBound), upperBound)
+    }
+    
+    func clamped(to limit: PartialRangeUpTo<Self>) -> Self {
+        let upperBound = limit.upperBound.advanced(by: -1)
+        return min(self, upperBound)
     }
 }
 

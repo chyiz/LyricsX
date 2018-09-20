@@ -22,28 +22,6 @@ import Cocoa
 import LyricsProvider
 import MusicPlayer
 
-extension NSObject {
-    
-    func bind<T>(_ binding: NSBindingName,
-                 to observable: UserDefaults,
-                 withDefaultName defaultName: UserDefaults.DefaultsKey<T>,
-                 options: [NSBindingOption: Any] = [:]) {
-        var options = options
-        if let transformer = defaultName.valueTransformer {
-            switch transformer {
-            case is UserDefaults.KeyedArchiveValueTransformer:
-                options[.valueTransformerName] = NSValueTransformerName.keyedUnarchiveFromDataTransformerName
-            case is UserDefaults.ArchiveValueTransformer:
-                options[.valueTransformerName] = NSValueTransformerName.unarchiveFromDataTransformerName
-            default:
-                break
-            }
-        }
-        
-        bind(binding, to: observable, withKeyPath: defaultName.key, options: options)
-    }
-}
-
 extension MusicPlayerName {
     
     init?(index: Int) {
@@ -74,6 +52,12 @@ extension UserDefaults {
                       size: CGFloat(self[.DesktopLyricsFontSize]),
                       fallback: self[.DesktopLyricsFontNameFallback])
             ?? NSFont.systemFont(ofSize: CGFloat(self[.DesktopLyricsFontSize]))
+    }
+    
+    var lyricsWindowFont: NSFont {
+        return NSFont(name: defaults[.LyricsWindowFontName],
+                      size: CGFloat(defaults[.LyricsWindowFontSize]))
+            ?? NSFont.labelFont(ofSize: CGFloat(defaults[.DesktopLyricsFontSize]))
     }
 }
 
@@ -143,7 +127,7 @@ extension Lyrics {
         let fileManager = FileManager.default
         
         do {
-            var isDir = ObjCBool(false)
+            var isDir: ObjCBool = false
             if fileManager.fileExists(atPath: url.path, isDirectory: &isDir) {
                 if !isDir.boolValue {
                     return
@@ -191,33 +175,13 @@ extension Lyrics {
     }
 }
 
-extension NSTextField {
+extension Lyrics {
     
-    @available(macOS, obsoleted: 10.12)
-    convenience init(labelWithString stringValue: String) {
-        self.init()
-        self.stringValue = stringValue
-        isEditable = false
-        isSelectable = false
-        textColor = .labelColor
-        backgroundColor = .controlColor
-        drawsBackground = false
-        isBezeled = false
-        alignment = .natural
-        font = NSFont.systemFont(ofSize: NSFont.systemFontSize(for: controlSize))
-        lineBreakMode = .byClipping
-        cell?.isScrollable = true
-        cell?.wraps = false
+    var adjustedOffset: Int {
+        return offset + defaults[.GlobalLyricsOffset]
     }
-}
-
-extension NSStoryboard {
     
-    @available(macOS, obsoleted: 10.13)
-    class var main: NSStoryboard? {
-        guard let mainStoryboardName = Bundle.main.infoDictionary?["NSMainStoryboardFile"] as? String else {
-            return nil
-        }
-        return NSStoryboard(name: NSStoryboard.Name(rawValue: mainStoryboardName), bundle: .main)
+    var adjustedTimeDelay: TimeInterval {
+        return TimeInterval(adjustedOffset) / 1000
     }
 }

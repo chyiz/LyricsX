@@ -39,7 +39,8 @@ class KaraokeLyricsView: NSBox {
     
     @objc dynamic var font = NSFont.labelFont(ofSize: 24) { didSet { updateFontSize() } }
     @objc dynamic var textColor = #colorLiteral(red: 1, green: 1, blue: 1, alpha: 1)
-    @objc dynamic var shadowColor = #colorLiteral(red: 0, green: 0.9914394021, blue: 1, alpha: 1)
+    @objc dynamic var shadowColor = #colorLiteral(red: 0, green: 1, blue: 0.8333333333, alpha: 1)
+    @objc dynamic var progressColor = #colorLiteral(red: 0, green: 1, blue: 0.8333333333, alpha: 1)
     
     @objc dynamic var shouldHideWithMouse = true {
         didSet {
@@ -78,20 +79,20 @@ class KaraokeLyricsView: NSBox {
     }
     
     private func lyricsLabel(_ content: String) -> KaraokeLabel {
-        if let v = stackView.subviews.lazy.compactMap({ $0 as? KaraokeLabel }).first(where: { !stackView.arrangedSubviews.contains($0) }) {
-            v.alphaValue = 0
-            v.stringValue = content
-            v.removeProgressAnimation()
-            v.removeFromSuperview()
-            return v
+        if let view = stackView.subviews.lazy.compactMap({ $0 as? KaraokeLabel }).first(where: { !stackView.arrangedSubviews.contains($0) }) {
+            view.alphaValue = 0
+            view.stringValue = content
+            view.removeProgressAnimation()
+            view.removeFromSuperview()
+            return view
         }
         return KaraokeLabel(labelWithString: content).then {
-            $0.bind(.font, to: self, withKeyPath: #keyPath(font))
-            $0.bind(.textColor, to: self, withKeyPath: #keyPath(textColor))
-            $0.bind(.init("progressColor"), to: self, withKeyPath: #keyPath(shadowColor))
-            $0.bind(.init("_shadowColor"), to: self, withKeyPath: #keyPath(shadowColor))
-            $0.bind(.init("isVertical"), to: self, withKeyPath: #keyPath(isVertical))
-            $0.bind(.init("drawFurigana"), to: self, withKeyPath: #keyPath(drawFurigana))
+            $0.bind(\.font, to: self, withKeyPath: \.font)
+            $0.bind(\.textColor, to: self, withKeyPath: \.textColor)
+            $0.bind(\.progressColor, to: self, withKeyPath: \.progressColor)
+            $0.bind(\._shadowColor, to: self, withKeyPath: \.shadowColor)
+            $0.bind(\.isVertical, to: self, withKeyPath: \.isVertical)
+            $0.bind(\.drawFurigana, to: self, withKeyPath: \.drawFurigana)
             $0.alphaValue = 0
         }
     }
