@@ -35,7 +35,8 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
     }
     
     let lyricsManager = LyricsProviderManager()
-    var searchTask: LyricsSearchTask?
+    var searchRequest: LyricsSearchRequest?
+    var searchProgress: Progress?
     var searchResult: [Lyrics] = []
     var progressObservation: NSKeyValueObservation?
     
@@ -57,9 +58,13 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
     }
     
     override func viewWillAppear() {
+        self.reloadKeyword()
+    }
+    
+    func reloadKeyword() {
         guard let track = AppController.shared.playerManager.player?.currentTrack else {
-            searchTask?.cancel()
-            searchTask = nil
+            searchProgress?.cancel()
+            searchProgress = nil
             searchResult = []
             searchArtist = ""
             searchTitle = ""
@@ -77,7 +82,7 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
     }
     
     @IBAction func searchAction(_ sender: Any?) {
-        searchTask?.cancel()
+        searchProgress?.cancel()
         progressObservation?.invalidate()
         searchResult = []
         artworkView.image = #imageLiteral(resourceName: "missing_artwork")
@@ -93,12 +98,11 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
                                       duration: duration,
                                       limit: 8,
                                       timeout: 10)
-        let task = lyricsManager.searchLyrics(request: req, using: self.lyricsReceived)
-        searchTask = task
-        task.resume()
+        searchRequest = req
+        searchProgress = lyricsManager.searchLyrics(request: req, using: self.lyricsReceived)
         progressIndicator.isHidden = false
         progressIndicator.doubleValue = 0
-        progressObservation = task.progress.observe(\.fractionCompleted, options: [.new]) { [weak self] _, change in
+        progressObservation = searchProgress?.observe(\.fractionCompleted, options: [.new]) { [weak self] _, change in
             guard let fractionCompleted = change.newValue else { return }
             DispatchQueue.main.async {
                 self?.progressIndicator.doubleValue = fractionCompleted
@@ -118,7 +122,7 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
         }
         
         if let id = AppController.shared.playerManager.player?.currentTrack?.id,
-            let index = defaults[.NoSearchingTrackIds].index(where: { $0 == id }) {
+            let index = defaults[.NoSearchingTrackIds].firstIndex(of: id) {
             defaults[.NoSearchingTrackIds].remove(at: index)
         }
         
@@ -136,9 +140,10 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
     // MARK: - LyricsSourceDelegate
     
     func lyricsReceived(lyrics: Lyrics) {
-        guard lyrics.metadata.request == searchTask?.request else {
+        guard lyrics.metadata.request == searchRequest else {
             return
         }
+        lyrics.metadata.needsPersist = true
         if let idx = searchResult.index(where: { lyrics.quality > $0.quality }) {
             searchResult.insert(lyrics, at: idx)
         } else {

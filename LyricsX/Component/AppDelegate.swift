@@ -185,15 +185,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     
     @IBAction func searchLyrics(_ sender: Any?) {
         searchLyricsWC.window?.makeKeyAndOrderFront(nil)
+        (searchLyricsWC.contentViewController as! SearchLyricsViewController?)?.reloadKeyword()
         NSApp.activate(ignoringOtherApps: true)
     }
     
     @IBAction func wrongLyrics(_ sender: Any?) {
-        if let id = AppController.shared.playerManager.player?.currentTrack?.id {
-            defaults[.NoSearchingTrackIds].append(id)
+        guard let track = AppController.shared.playerManager.player?.currentTrack else {
+            return
         }
+        defaults[.NoSearchingTrackIds].append(track.id)
         if defaults[.WriteToiTunesAutomatically] {
-            (AppController.shared.playerManager.player as? iTunes)?.currentLyrics = ""
+            track.setLyrics("")
         }
         if let url = AppController.shared.currentLyrics?.metadata.localURL {
             try? FileManager.default.removeItem(at: url)

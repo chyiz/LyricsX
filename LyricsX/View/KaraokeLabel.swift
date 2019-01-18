@@ -89,7 +89,7 @@ class KaraokeLabel: NSTextField {
             guard shouldDrawFurigana else { continue }
             if let (furigana, range) = tokenizer.currentFuriganaAnnotation(in: string) {
                 var attr: [NSAttributedStringKey: Any] = [.rubyAnnotationSizeFactor: 0.5]
-                attr[.foregroundColor] = textColor // Set ruby text color but it seems doesn't work.
+                attr[.ctForegroundColor] = textColor
                 let annotation = CTRubyAnnotation.create(furigana, attributes: attr)
                 attrString.addAttribute(.rubyAnnotation, value: annotation, range: range)
             }
@@ -117,7 +117,7 @@ class KaraokeLabel: NSTextField {
         return ctFrame
     }
     
-    override func sizeThatFits(_ size: NSSize) -> NSSize {
+    override var intrinsicContentSize: NSSize {
         let framesetter = CTFramesetterCreateWithAttributedString(attrString)
         let cfRange = attrString.fullRange.asCF
         let progression: CTFrameProgression = isVertical ? .rightToLeft : .topToBottom
@@ -125,18 +125,6 @@ class KaraokeLabel: NSTextField {
         let constraints = CGSize(width: CGFloat.infinity, height: .infinity)
         let suggestSize = CTFramesetterSuggestFrameSizeWithConstraints(framesetter, cfRange, frameAttr, constraints, nil)
         return suggestSize
-    }
-    
-    override func sizeToFit() {
-        frame.size = sizeThatFits(.zero)
-    }
-    
-    override var fittingSize: NSSize {
-        return sizeThatFits(.zero)
-    }
-    
-    override var intrinsicContentSize: NSSize {
-        return sizeThatFits(.zero)
     }
     
     override func draw(_ dirtyRect: NSRect) {
