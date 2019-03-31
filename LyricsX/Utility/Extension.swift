@@ -133,7 +133,11 @@ extension Lyrics {
             let artist = metadata.artist?.replacingOccurrences(of: "/", with: "&") else {
             return nil
         }
-        return "\(artist) - \(title).lrcx"
+        if (metadata.hasTranslation || metadata.attachmentTags.contains(.timetag)){
+            return "\(artist) - \(title).lrcx"
+        } else {
+            return "\(artist) - \(title).lrc"
+        }
     }
     
 }
