@@ -23,6 +23,8 @@ import GenericID
 import MusicPlayer
 
 let fontNameFallbackCountMax = 1
+// 7 days. after this period of time since the app built, the app is not considered as "in review".
+let masReviewPeriodLimit: TimeInterval = 60 * 60 * 24 * 7
 
 // NOTE: to build your own product, you need to replace the team identifier to yours
 // and do the same thing in LyricsXHelper
@@ -30,13 +32,15 @@ let lyricsXGroupIdentifier = "3665V726AE.group.ddddxxx.LyricsX"
 let lyricsXHelperIdentifier = "ddddxxx.LyricsXHelper"
 let lyricsXErrorDomain = "ddddxxx.LyricsX"
 
+let crowdinProjectURL = URL(string: "https://crowdin.com/project/lyricsx")!
+
 let defaults = UserDefaults.standard
 let groupDefaults = UserDefaults(suiteName: lyricsXGroupIdentifier)!
 let defaultNC = NotificationCenter.default
 let workspaceNC = NSWorkspace.shared.notificationCenter
 
 let isInSandbox = ProcessInfo.processInfo.environment["APP_SANDBOX_CONTAINER_ID"] != nil
-let isFromMacAppStore = (try? Bundle.main.appStoreReceiptURL?.checkResourceIsReachable()) ?? nil == true
+let isFromMacAppStore = (try? Bundle.main.appStoreReceiptURL?.checkResourceIsReachable()) == true
 
 extension CAMediaTimingFunction {
     static let mystery = CAMediaTimingFunction(controlPoints: 0.2, 0.1, 0.2, 1)
@@ -52,8 +56,9 @@ func log(_ message: @autoclosure () -> String, file: String = #file, line: UInt 
 // MARK: - Identifier
 
 extension NSUserInterfaceItemIdentifier {
-    static let WriteToiTunes = NSUserInterfaceItemIdentifier("MainMenu.WriteToiTunes")
-    static let LyricsMenu = NSUserInterfaceItemIdentifier("MainMenu.Lyrics")
+//    static let WriteToiTunes = NSUserInterfaceItemIdentifier("MainMenu.WriteToiTunes")
+//    static let SearchLyrics = NSUserInterfaceItemIdentifier("MainMenu.SearchLyrics")
+//    static let LyricsMenu = NSUserInterfaceItemIdentifier("MainMenu.Lyrics")
     
     static let searchResultColumnTitle = NSUserInterfaceItemIdentifier("SearchResult.TableColumn.Title")
     static let searchResultColumnArtist = NSUserInterfaceItemIdentifier("SearchResult.TableColumn.Artist")

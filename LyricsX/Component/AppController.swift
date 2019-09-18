@@ -40,11 +40,12 @@ class AppController: NSObject, MusicPlayerManagerDelegate {
             currentLyrics?.recognizeLanguage()
             didChangeValue(forKey: "lyricsOffset")
             currentLineIndex = nil
-            NotificationCenter.default.post(name: .currentLyricsChange, object: nil)
+            postNotification(name: .currentLyricsChange)
             timer?.fireDate = Date()
         }
     }
     
+    var searchRequest: LyricsSearchRequest?
     var searchProgress: Progress?
     
     var currentLineIndex: Int?
@@ -116,7 +117,7 @@ class AppController: NSObject, MusicPlayerManagerDelegate {
     }
     
     func playbackStateChanged(state: MusicPlaybackState) {
-        NotificationCenter.default.post(name: .lyricsShouldDisplay, object: nil)
+        postNotification(name: .lyricsShouldDisplay)
         if state == .playing {
             timer?.fireDate = Date()
         } else {
@@ -125,7 +126,7 @@ class AppController: NSObject, MusicPlayerManagerDelegate {
     }
     
     func currentTrackChanged(track: MusicTrack?) {
-        NotificationCenter.default.post(name: .currentTrackChange, object: nil)
+        postNotification(name: .currentTrackChange)
         if currentLyrics?.metadata.needsPersist == true {
             currentLyrics?.persist()
         }
@@ -138,8 +139,7 @@ class AppController: NSObject, MusicPlayerManagerDelegate {
         let title = track.title ?? ""
         let artist = track.artist ?? ""
         
-        guard !defaults[.NoSearchingTrackIds].contains(track.id),
-            !defaults[.NoSearchingAlbumNames].contains(track.album ?? "") else {
+        guard !defaults[.NoSearchingTrackIds].contains(track.id) else {
             return
         }
         
@@ -197,6 +197,10 @@ class AppController: NSObject, MusicPlayerManagerDelegate {
             checkForMASReview()
         #endif
         
+        if let album = track.album, defaults[.NoSearchingAlbumNames].contains(album) {
+            return
+        }
+        
         let duration = track.duration ?? 0
         let req = LyricsSearchRequest(searchTerm: .info(title: title, artist: artist),
                                       title: title,
@@ -204,20 +208,21 @@ class AppController: NSObject, MusicPlayerManagerDelegate {
                                       duration: duration,
                                       limit: 5,
                                       timeout: 10)
+        searchRequest = req
         searchProgress = lyricsManager.searchLyrics(request: req, using: self.lyricsReceived)
         Answers.logCustomEvent(withName: "Search Lyrics Automatically", customAttributes: ["override": currentLyrics == nil ? 0 : 1])
     }
     
     func playerPositionMutated(position: TimeInterval) {
         guard let lyrics = currentLyrics else {
-            NotificationCenter.default.post(name: .lyricsShouldDisplay, object: nil)
+            postNotification(name: .lyricsShouldDisplay)
             timer?.fireDate = .distantFuture
             return
         }
         let (index, next) = lyrics[position + lyrics.adjustedTimeDelay]
         if currentLineIndex != index {
             currentLineIndex = index
-            NotificationCenter.default.post(name: .lyricsShouldDisplay, object: nil)
+            postNotification(name: .lyricsShouldDisplay)
         }
         if let next = next {
             timer?.fireDate = Date() + lyrics.lines[next].position - lyrics.adjustedTimeDelay - position
@@ -236,9 +241,8 @@ class AppController: NSObject, MusicPlayerManagerDelegate {
     // MARK: LyricsSourceDelegate
     
     func lyricsReceived(lyrics: Lyrics) {
-        let track = playerManager.player?.currentTrack
-        guard lyrics.metadata.title == track?.title ?? "",
-            lyrics.metadata.artist == track?.artist ?? "" else {
+        guard let req = searchRequest,
+            lyrics.metadata.request == req else {
             return
         }
         if defaults[.StrictSearchEnabled] && !lyrics.isMatched() {

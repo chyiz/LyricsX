@@ -21,26 +21,6 @@
 import AppKit
 import MusicPlayer
 
-@available(OSX 10.12.2, *)
-class TouchBarArtworkItem: NSCustomTouchBarItem {
-    
-    override init(identifier: NSTouchBarItem.Identifier) {
-        super.init(identifier: identifier)
-        commonInit()
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        commonInit()
-    }
-
-    func commonInit() {
-        viewController = TouchBarArtworkViewController()
-        customizationLabel = "Artwork"
-    }
-}
-
-@available(OSX 10.12.2, *)
 class TouchBarArtworkViewController: NSViewController {
     
     let artworkView = NSImageView()
@@ -53,10 +33,12 @@ class TouchBarArtworkViewController: NSViewController {
     
     override func viewDidLoad() {
         reloadImage()
-        NotificationCenter.default.addObserver(self, selector: #selector(reloadImage), name: .currentTrackChange, object: nil)
+        observeNotification(name: .currentTrackChange) { [unowned self] _ in
+            self.reloadImage()
+        }
     }
     
-    @objc func reloadImage() {
+    func reloadImage() {
         guard let player = AppController.shared.playerManager.player else {
             artworkView.image = nil
             return

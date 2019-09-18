@@ -72,7 +72,7 @@ class KaraokeLyricsWindowController: NSWindowController {
         lyricsView.bind(\.textColor, withDefaultName: .DesktopLyricsColor)
         lyricsView.bind(\.progressColor, withDefaultName: .DesktopLyricsProgressColor)
         lyricsView.bind(\.shadowColor, withDefaultName: .DesktopLyricsShadowColor)
-        lyricsView.bind(\.fillColor, withDefaultName: .DesktopLyricsBackgroundColor)
+        lyricsView.bind(\.backgroundColor, withDefaultName: .DesktopLyricsBackgroundColor)
         lyricsView.bind(\.isVertical, withDefaultName: .DesktopLyricsVerticalMode, options: [.nullPlaceholder: false])
         lyricsView.bind(\.drawFurigana, withDefaultName: .DesktopLyricsEnableFurigana)
         
@@ -129,10 +129,13 @@ class KaraokeLyricsWindowController: NSWindowController {
         
         var firstLine = lrc.content
         var secondLine: String
+        var secondLineIsTranslation = false
         if defaults[.DesktopLyricsOneLineMode] {
             secondLine = ""
-        } else if defaults[.PreferBilingualLyrics] {
-            secondLine = lrc.attachments.translation(languageCode: languageCode) ?? next?.content ?? ""
+        } else if defaults[.PreferBilingualLyrics],
+            let translation = lrc.attachments.translation(languageCode: languageCode) {
+            secondLine = translation
+            secondLineIsTranslation = true
         } else {
             secondLine = next?.content ?? ""
         }
@@ -140,6 +143,9 @@ class KaraokeLyricsWindowController: NSWindowController {
         if let converter = ChineseConverter.shared {
             if lyrics.metadata.language?.hasPrefix("zh") == true {
                 firstLine = converter.convert(firstLine)
+                if !secondLineIsTranslation {
+                    secondLine = converter.convert(secondLine)
+                }
             }
             if languageCode?.hasPrefix("zh") == true {
                 secondLine = converter.convert(secondLine)
