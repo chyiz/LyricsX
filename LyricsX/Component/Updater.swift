@@ -1,21 +1,8 @@
 //
 //  Updater.swift
 //
-//  This file is part of LyricsX
-//  Copyright (C) 2017 Xander Deng - https://github.com/ddddxxx/LyricsX
-//
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU General Public License as published by
-//  the Free Software Foundation, either version 3 of the License, or
-//  (at your option) any later version.
-//
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU General Public License for more details.
-//
-//  You should have received a copy of the GNU General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+//  This file is part of LyricsX - https://github.com/ddddxxx/LyricsX
+//  Copyright (C) 2017  Xander Deng. Licensed under GPLv3.
 //
 
 import Cocoa
@@ -28,23 +15,12 @@ var remoteVersion: Semver? {
     do {
         let data = try Data(contentsOf: url)
         let response = try JSONDecoder().decode(GitHubResponse.self, from: data)
-        var tag = response.tag_name
         guard !response.draft else { return nil }
-        if tag.hasPrefix("v") {
-            tag.removeFirst()
-        }
-        return Semver(tag)
+        return Semver(response.tag_name)
     } catch {
         log("failed to read remote varsion: \(error)")
         return nil
     }
-}
-
-var localVersion: Semver {
-    let info = Bundle.main.infoDictionary!
-    // swiftlint:disable:next force_cast
-    let shortVersion = info["CFBundleShortVersionString"] as! String
-    return Semver(shortVersion)!
 }
 
 #if IS_FOR_MAS
@@ -61,7 +37,7 @@ var localVersion: Semver {
             return
         }
         DispatchQueue.global().async {
-            let local = localVersion
+            let local = Bundle.main.semanticVersion!
             guard let remote = remoteVersion else {
                 return
             }
@@ -71,13 +47,6 @@ var localVersion: Semver {
     }
     
 #endif
-
-extension Semver {
-    
-    var isPrerelease: Bool {
-        return !prerelease.isEmpty
-    }
-}
 
 struct GitHubResponse: Decodable {
     // swiftlint:disable:next identifier_name

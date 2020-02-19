@@ -1,24 +1,12 @@
 //
 //  KaraokeLabel.swift
 //
-//  This file is part of LyricsX
-//  Copyright (C) 2017 Xander Deng - https://github.com/ddddxxx/LyricsX
-//
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU General Public License as published by
-//  the Free Software Foundation, either version 3 of the License, or
-//  (at your option) any later version.
-//
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU General Public License for more details.
-//
-//  You should have received a copy of the GNU General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+//  This file is part of LyricsX - https://github.com/ddddxxx/LyricsX
+//  Copyright (C) 2017  Xander Deng. Licensed under GPLv3.
 //
 
 import Cocoa
+import SwiftCF
 
 class KaraokeLabel: NSTextField {
     
@@ -76,20 +64,20 @@ class KaraokeLabel: NSTextField {
         let attrString = NSMutableAttributedString(attributedString: attributedStringValue)
         let string = attrString.string as NSString
         let shouldDrawFurigana = drawFurigana && string.dominantLanguage == "ja"
-        let tokenizer = CFStringTokenizer.create(string)
-        for tokenType in tokenizer where tokenType.contains(.isCJWordMask) {
+        let tokenizer = CFStringTokenizer.create(string: .from(string))
+        for tokenType in IteratorSequence(tokenizer) where tokenType.contains(.isCJWordMask) {
             if isVertical {
                 let tokenRange = tokenizer.currentTokenRange()
                 let attr: [NSAttributedString.Key: Any] = [
                     .verticalGlyphForm: true,
                     .baselineOffset: (font?.pointSize ?? 24) * 0.25,
                 ]
-                attrString.addAttributes(attr, range: tokenRange)
+                attrString.addAttributes(attr, range: tokenRange.asNS)
             }
             guard shouldDrawFurigana else { continue }
             if let (furigana, range) = tokenizer.currentFuriganaAnnotation(in: string) {
-                var attr: [NSAttributedString.Key: Any] = [.rubyAnnotationSizeFactor: 0.5]
-                attr[.ctForegroundColor] = textColor
+                var attr: [CFAttributedString.Key: Any] = [.rubySizeFactor: 0.5]
+                attr[.foregroundColor] = textColor
                 let annotation = CTRubyAnnotation.create(furigana, attributes: attr)
                 attrString.addAttribute(.rubyAnnotation, value: annotation, range: range)
             }
@@ -106,25 +94,21 @@ class KaraokeLabel: NSTextField {
         }
         layoutSubtreeIfNeeded()
         let progression: CTFrameProgression = isVertical ? .rightToLeft : .topToBottom
-        let frameAttr: NSDictionary = [kCTFrameProgressionAttributeName: NSNumber(value: progression.rawValue)]
-        let framesetter = CTFramesetterCreateWithAttributedString(attrString)
-        let fullRange = attrString.fullRange.asCF
-        var fitRange = CFRange()
-        let suggestSize = CTFramesetterSuggestFrameSizeWithConstraints(framesetter, fullRange, frameAttr, bounds.size, &fitRange)
+        let frameAttr: [CTFrame.AttributeKey: Any] = [.progression: progression]
+        let framesetter = CTFramesetter.create(attributedString: attrString)
+        let (suggestSize, fitRange) = framesetter.suggestFrameSize(constraints: bounds.size, frameAttributes: frameAttr)
         let path = CGPath(rect: CGRect(origin: .zero, size: suggestSize), transform: nil)
-        let ctFrame = CTFramesetterCreateFrame(framesetter, fitRange, path, frameAttr)
+        let ctFrame = framesetter.frame(stringRange: fitRange, path: path, frameAttributes: frameAttr)
         _ctFrame = ctFrame
         return ctFrame
     }
     
     override var intrinsicContentSize: NSSize {
-        let framesetter = CTFramesetterCreateWithAttributedString(attrString)
-        let cfRange = attrString.fullRange.asCF
         let progression: CTFrameProgression = isVertical ? .rightToLeft : .topToBottom
-        let frameAttr: NSDictionary = [kCTFrameProgressionAttributeName: NSNumber(value: progression.rawValue)]
+        let frameAttr: [CTFrame.AttributeKey: Any] = [.progression: progression]
+        let framesetter = CTFramesetter.create(attributedString: attrString)
         let constraints = CGSize(width: CGFloat.infinity, height: .infinity)
-        let suggestSize = CTFramesetterSuggestFrameSizeWithConstraints(framesetter, cfRange, frameAttr, constraints, nil)
-        return suggestSize
+        return framesetter.suggestFrameSize(constraints: constraints, frameAttributes: frameAttr).size
     }
     
     override func draw(_ dirtyRect: NSRect) {
@@ -157,7 +141,7 @@ class KaraokeLabel: NSTextField {
     func setProgressAnimation(color: NSColor, progress: [(TimeInterval, Int)]) {
         removeProgressAnimation()
         guard let line = ctFrame.lines.first,
-            let origin = ctFrame.lineOrigins.first else {
+            let origin = ctFrame.lineOrigins(range: CFRange(location: 0, length: 1)).first else {
                 return
         }
         var lineBounds = line.bounds()
@@ -223,4 +207,8 @@ class KaraokeLabel: NSTextField {
         progressLayer.frame = .zero
         CATransaction.commit()
     }
+}
+
+extension CFAttributedString.Key {
+    static let rubyAnnotation = kCTRubyAnnotationAttributeName as CFAttributedString.Key
 }

@@ -1,73 +1,74 @@
 //
 //  TouchBarPlaybackControlItem.swift
 //
-//  This file is part of LyricsX
-//  Copyright (C) 2017 Xander Deng - https://github.com/ddddxxx/LyricsX
-//
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU General Public License as published by
-//  the Free Software Foundation, either version 3 of the License, or
-//  (at your option) any later version.
-//
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU General Public License for more details.
-//
-//  You should have received a copy of the GNU General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+//  This file is part of LyricsX - https://github.com/ddddxxx/LyricsX
+//  Copyright (C) 2017  Xander Deng. Licensed under GPLv3.
 //
 
 import AppKit
 import MusicPlayer
-import SnapKit
+import CombineX
 
 @available(OSX 10.12.2, *)
 class TouchBarPlaybackControlViewController: NSViewController {
     
+    private weak var segmentedControl: NSSegmentedControl!
+    
+    private var cancelBag = Set<AnyCancellable>()
+    
     override func loadView() {
         let rewindImage = NSImage(named: NSImage.touchBarRewindTemplateName)!
-        let rewindButton = NSButton(image: rewindImage, target: self, action: #selector(rewindAction(_:)))
         let playPauseImage = NSImage(named: NSImage.touchBarPlayPauseTemplateName)!
-        let playPauseButton = NSButton(image: playPauseImage, target: self, action: #selector(playPauseAction(_:)))
         let fastForwardImage = NSImage(named: NSImage.touchBarFastForwardTemplateName)!
-        let fastForwardButton = NSButton(image: fastForwardImage, target: self, action: #selector(fastForwardAction(_:)))
-        view = NSView()
-        view.addSubview(rewindButton)
-        view.addSubview(playPauseButton)
-        view.addSubview(fastForwardButton)
-        rewindButton.snp.makeConstraints { make in
-            make.top.left.bottom.equalToSuperview()
-            make.width.equalTo(playPauseButton.snp.width)
-            make.width.equalTo(fastForwardButton.snp.width)
-            make.width.equalTo(50)
-        }
-        playPauseButton.snp.makeConstraints { make in
-            make.top.bottom.equalToSuperview()
-            make.left.equalTo(rewindButton.snp.right).offset(2)
-            make.right.equalTo(fastForwardButton.snp.left).offset(-2)
-        }
-        fastForwardButton.snp.makeConstraints { make in
-            make.top.right.bottom.equalToSuperview()
+        let seg = NSSegmentedControl()
+        seg.trackingMode = .momentary
+        seg.segmentCount = 3
+        seg.setImage(rewindImage, forSegment: 0)
+        seg.setImage(playPauseImage, forSegment: 1)
+        seg.setImage(fastForwardImage, forSegment: 2)
+        seg.target = self
+        seg.action = #selector(segmentAction)
+        
+        self.view = seg
+        self.segmentedControl = seg
+        
+        selectedPlayer.playbackStateWillChange
+            .receive(on: DispatchQueue.main.cx)
+            .sink { [weak self] state in
+                self?.updatePlayPauseIcon(isPlaying: state.isPlaying)
+            }.store(in: &cancelBag)
+        updatePlayPauseIcon(isPlaying: selectedPlayer.playbackState.isPlaying)
+    }
+    
+    func updatePlayPauseIcon(isPlaying: Bool) {
+        let image = isPlaying
+            ? NSImage(named: NSImage.touchBarPauseTemplateName)
+            : NSImage(named: NSImage.touchBarPlayTemplateName)
+        segmentedControl?.setImage(image, forSegment: 1)
+    }
+    
+    @IBAction func segmentAction(_ sender: NSSegmentedControl) {
+        switch sender.selectedSegment {
+        case 0: rewindAction(nil)
+        case 1: playPauseAction(nil)
+        case 2: fastForwardAction(nil)
+        default: break
         }
     }
     
     @IBAction func rewindAction(_ sender: Any?) {
-        guard let player = AppController.shared.playerManager.player else {
-            return
-        }
-        if player.playerPosition > 5 {
-            player.playerPosition = 0
+        if selectedPlayer.playbackTime > 5 {
+            selectedPlayer.playbackTime = 0
         } else {
-            player.skipToPreviousItem()
+            selectedPlayer.skipToPreviousItem()
         }
     }
     
     @IBAction func playPauseAction(_ sender: Any?) {
-        AppController.shared.playerManager.player?.playPause()
+        selectedPlayer.playPause()
     }
     
     @IBAction func fastForwardAction(_ sender: Any?) {
-        AppController.shared.playerManager.player?.skipToNextItem()
+        selectedPlayer.skipToNextItem()
     }
 }

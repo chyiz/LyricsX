@@ -1,26 +1,14 @@
 //
 //  MenuBarLyrics.swift
 //
-//  This file is part of LyricsX
-//  Copyright (C) 2017 Xander Deng - https://github.com/ddddxxx/LyricsX
-//
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU General Public License as published by
-//  the Free Software Foundation, either version 3 of the License, or
-//  (at your option) any later version.
-//
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU General Public License for more details.
-//
-//  You should have received a copy of the GNU General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+//  This file is part of LyricsX - https://github.com/ddddxxx/LyricsX
+//  Copyright (C) 2017  Xander Deng. Licensed under GPLv3.
 //
 
 import Cocoa
+import CombineX
 import GenericID
-import LyricsProvider
+import LyricsCore
 import MusicPlayer
 import OpenCC
 
@@ -33,23 +21,35 @@ class MenuBarLyrics: NSObject {
     var buttonImage = #imageLiteral(resourceName: "status_bar_icon")
     var buttonlength: CGFloat = 30
     
-    private var screenLyrics = ""
+    private var screenLyrics = "" {
+        didSet {
+            DispatchQueue.main.async {
+                self.updateStatusItem()
+            }
+        }
+    }
+    
+    private var cancelBag = Set<AnyCancellable>()
     
     private override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
-        
-        observeNotification(name: .lyricsShouldDisplay) { [unowned self] _ in self.handleLyricsDisplay() }
+        AppController.shared.$currentLyrics
+            .combineLatest(AppController.shared.$currentLineIndex)
+            .receive(on: DispatchQueue.lyricsDisplay.cx)
+            .sink { [unowned self] lrc, idx in
+                self.handleLyricsDisplay(lyrics: lrc, index: idx)
+            }
+            .store(in: &cancelBag)
         observeNotification(center: workspaceNC, name: NSWorkspace.didActivateApplicationNotification) { [unowned self] _ in self.updateStatusItem() }
         observeDefaults(keys: [.MenuBarLyricsEnabled, .CombinedMenubarLyrics], options: [.initial]) { [unowned self] in self.updateStatusItem() }
     }
     
-    @objc private func handleLyricsDisplay() {
-        guard !defaults[.DisableLyricsWhenPaused] || AppController.shared.playerManager.player?.playbackState == .playing,
-            let lyrics = AppController.shared.currentLyrics,
-            let index = AppController.shared.currentLineIndex else {
+    private func handleLyricsDisplay(lyrics: Lyrics?, index: Int?) {
+        guard !defaults[.DisableLyricsWhenPaused] || selectedPlayer.playbackState.isPlaying,
+            let lyrics = lyrics,
+            let index = index else {
             screenLyrics = ""
-            updateStatusItem()
             return
         }
         var newScreenLyrics = lyrics.lines[index].content
@@ -60,7 +60,6 @@ class MenuBarLyrics: NSObject {
             return
         }
         screenLyrics = newScreenLyrics
-        updateStatusItem()
     }
     
     @objc private func updateStatusItem() {

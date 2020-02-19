@@ -1,27 +1,14 @@
 //
 //  TouchBarLyrics.swift
 //
-//  This file is part of LyricsX
-//  Copyright (C) 2017 Xander Deng - https://github.com/ddddxxx/LyricsX
-//
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU General Public License as published by
-//  the Free Software Foundation, either version 3 of the License, or
-//  (at your option) any later version.
-//
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU General Public License for more details.
-//
-//  You should have received a copy of the GNU General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+//  This file is part of LyricsX - https://github.com/ddddxxx/LyricsX
+//  Copyright (C) 2017  Xander Deng. Licensed under GPLv3.
 //
 
 import Cocoa
-import LyricsProvider
-import OpenCC
 import DFRPrivate
+import LyricsCore
+import OpenCC
 
 @available(OSX 10.12.2, *)
 class TouchBarSystemModalController: NSObject, NSTouchBarDelegate {
@@ -50,13 +37,14 @@ class TouchBarSystemModalController: NSObject, NSTouchBarDelegate {
     }
     
     @objc func showInControlStrip() {
+        NSTouchBar.setSystemModalShowsCloseBoxWhenFrontMost(false)
         systemTrayItem?.addToSystemTray()
         systemTrayItem?.setControlStripPresence(true)
-        NSTouchBar.setSystemModalShowsCloseBoxWhenFrontMost(true)
     }
     
     @objc func removeFromControlStrip() {
         dismiss()
+        systemTrayItem?.setControlStripPresence(false)
         systemTrayItem?.removeFromSystemTray()
     }
     
@@ -90,16 +78,18 @@ class TouchBarLyrics: TouchBarSystemModalController {
         
         lyricsItem.bind(\.progressColor, withUnmatchedDefaultName: .DesktopLyricsProgressColor)
         
-        self.observeNotification(name: NSApplication.willBecomeActiveNotification) { [unowned self] _ in
+        self.observeNotification(name: NSApplication.willBecomeActiveNotification) { [weak self] _ in
+            guard let self = self else { return }
             self.removeFromControlStrip()
-            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(500)) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200)) {
                 NSApp.touchBar = self.touchBar
             }
         }
         
-        self.observeNotification(name: NSApplication.didResignActiveNotification) { [unowned self] _ in
+        self.observeNotification(name: NSApplication.didResignActiveNotification) { [weak self] _ in
+            guard let self = self else { return }
             NSApp.touchBar = nil
-            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(500)) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(100)) {
                 self.showInControlStrip()
             }
         }

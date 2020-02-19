@@ -1,35 +1,26 @@
 //
 //  KaraokeLyricsController.swift
 //
-//  This file is part of LyricsX
-//  Copyright (C) 2017 Xander Deng - https://github.com/ddddxxx/LyricsX
-//
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU General Public License as published by
-//  the Free Software Foundation, either version 3 of the License, or
-//  (at your option) any later version.
-//
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU General Public License for more details.
-//
-//  You should have received a copy of the GNU General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+//  This file is part of LyricsX - https://github.com/ddddxxx/LyricsX
+//  Copyright (C) 2017  Xander Deng. Licensed under GPLv3.
 //
 
 import Cocoa
+import CombineX
 import GenericID
-import LyricsProvider
+import LyricsCore
 import MusicPlayer
 import OpenCC
 import SnapKit
+import SwiftCF
 
 class KaraokeLyricsWindowController: NSWindowController {
     
     static private let windowFrame = NSWindow.FrameAutosaveName("KaraokeWindow")
     
     private var lyricsView = KaraokeLyricsView(frame: .zero)
+    
+    private var cancelBag = Set<AnyCancellable>()
     
     init() {
         let window = NSWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: true)
@@ -51,13 +42,21 @@ class KaraokeLyricsWindowController: NSWindowController {
         lyricsView.displayLrc("LyricsX")
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
             self.lyricsView.displayLrc("")
-            self.handleLyricsDisplay()
-            self.observeNotification(name: .lyricsShouldDisplay) { [unowned self] _ in
-                self.handleLyricsDisplay()
-            }
-            self.observeNotification(name: .currentLyricsChange) { [unowned self] _ in
-                self.handleLyricsDisplay()
-            }
+            AppController.shared.$currentLyrics
+                .receive(on: DispatchQueue.lyricsDisplay.cx)
+                .sink { [unowned self] _ in
+                    self.handleLyricsDisplay()
+                }.store(in: &self.cancelBag)
+            AppController.shared.$currentLineIndex
+                .receive(on: DispatchQueue.lyricsDisplay.cx)
+                .sink { [unowned self] _ in
+                    self.handleLyricsDisplay()
+                }.store(in: &self.cancelBag)
+            selectedPlayer.playbackStateWillChange
+                .receive(on: DispatchQueue.lyricsDisplay.cx)
+                .sink { [unowned self] _ in
+                    self.handleLyricsDisplay()
+                }.store(in: &self.cancelBag)
             self.observeDefaults(keys: [.PreferBilingualLyrics, .DesktopLyricsOneLineMode]) { [unowned self] in
                 self.handleLyricsDisplay()
             }
@@ -113,7 +112,7 @@ class KaraokeLyricsWindowController: NSWindowController {
     
     @objc private func handleLyricsDisplay() {
         guard defaults[.DesktopLyricsEnabled],
-            !defaults[.DisableLyricsWhenPaused] || AppController.shared.playerManager.player?.playbackState == .playing,
+            !defaults[.DisableLyricsWhenPaused] || selectedPlayer.playbackState.isPlaying,
             let lyrics = AppController.shared.currentLyrics,
             let index = AppController.shared.currentLineIndex else {
                 DispatchQueue.main.async {
@@ -155,11 +154,14 @@ class KaraokeLyricsWindowController: NSWindowController {
         DispatchQueue.main.async {
             self.lyricsView.displayLrc(firstLine, secondLine: secondLine)
             if let upperTextField = self.lyricsView.displayLine1,
-                let timetag = lrc.attachments.timetag,
-                let position = AppController.shared.playerManager.player?.playerPosition {
+                let timetag = lrc.attachments.timetag {
+                let position = selectedPlayer.playbackTime
                 let timeDelay = AppController.shared.currentLyrics?.adjustedTimeDelay ?? 0
                 let progress = timetag.tags.map { ($0.timeTag + lrc.position - timeDelay - position, $0.index) }
                 upperTextField.setProgressAnimation(color: self.lyricsView.progressColor, progress: progress)
+                if !selectedPlayer.playbackState.isPlaying {
+                    upperTextField.pauseProgressAnimation()
+                }
             }
         }
     }

@@ -1,26 +1,15 @@
 //
 //  SearchLyricsViewController.swift
 //
-//  This file is part of LyricsX
-//  Copyright (C) 2017 Xander Deng - https://github.com/ddddxxx/LyricsX
-//
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU General Public License as published by
-//  the Free Software Foundation, either version 3 of the License, or
-//  (at your option) any later version.
-//
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU General Public License for more details.
-//
-//  You should have received a copy of the GNU General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+//  This file is part of LyricsX - https://github.com/ddddxxx/LyricsX
+//  Copyright (C) 2017  Xander Deng. Licensed under GPLv3.
 //
 
 import Cocoa
+import CombineX
 import Crashlytics
-import LyricsProvider
+import CXExtensions
+import LyricsService
 import MusicPlayer
 
 class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSource, NSTextFieldDelegate {
@@ -36,7 +25,7 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
     
     let lyricsManager = LyricsProviderManager()
     var searchRequest: LyricsSearchRequest?
-    var searchProgress: Progress?
+    var searchCanceller: Cancellable?
     var searchResult: [Lyrics] = []
     var progressObservation: NSKeyValueObservation?
     
@@ -62,9 +51,8 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
     }
     
     func reloadKeyword() {
-        guard let track = AppController.shared.playerManager.player?.currentTrack else {
-            searchProgress?.cancel()
-            searchProgress = nil
+        guard let track = selectedPlayer.currentTrack else {
+            searchCanceller?.cancel()
             searchResult = []
             searchArtist = ""
             searchTitle = ""
@@ -82,13 +70,13 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
     }
     
     @IBAction func searchAction(_ sender: Any?) {
-        searchProgress?.cancel()
+        searchCanceller?.cancel()
         progressObservation?.invalidate()
         searchResult = []
         artworkView.image = #imageLiteral(resourceName: "missing_artwork")
         lyricsPreviewTextView.string = " "
         
-        let track = AppController.shared.playerManager.player?.currentTrack
+        let track = selectedPlayer.currentTrack
         let duration = track?.duration ?? 0
         let title = track?.title ?? ""
         let artist = track?.artist ?? ""
@@ -99,19 +87,15 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
                                       limit: 8,
                                       timeout: 10)
         searchRequest = req
-        searchProgress = lyricsManager.searchLyrics(request: req, using: self.lyricsReceived)
-        progressIndicator.isHidden = false
-        progressIndicator.doubleValue = 0
-        progressObservation = searchProgress?.observe(\.fractionCompleted, options: [.new]) { [weak self] _, change in
-            guard let fractionCompleted = change.newValue else { return }
-            DispatchQueue.main.async {
-                self?.progressIndicator.doubleValue = fractionCompleted
-                if fractionCompleted == 1 {
-                    self?.progressIndicator.isHidden = true
-                    self?.progressObservation?.invalidate()
+        searchCanceller = lyricsManager.lyricsPublisher(request: req)
+            .sink(receiveCompletion: { [unowned self] _ in
+                DispatchQueue.main.async {
+                    self.progressIndicator.stopAnimation(nil)
                 }
-            }
-        }
+            }, receiveValue: { [unowned self] lyrics in
+                self.lyricsReceived(lyrics: lyrics)
+            }).cancel(after: .seconds(10), scheduler: DispatchQueue.lyricsDisplay.cx)
+        progressIndicator.startAnimation(nil)
         tableView.reloadData()
         Answers.logCustomEvent(withName: "Search Lyrics Manually")
     }
@@ -121,7 +105,7 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
             return
         }
         
-        if let track = AppController.shared.playerManager.player?.currentTrack {
+        if let track = selectedPlayer.currentTrack {
             if let index = defaults[.NoSearchingTrackIds].firstIndex(of: track.id) {
                 defaults[.NoSearchingTrackIds].remove(at: index)
             }
@@ -147,6 +131,8 @@ class SearchLyricsViewController: NSViewController, NSTableViewDelegate, NSTable
         guard lyrics.metadata.request == searchRequest else {
             return
         }
+        lyrics.filtrate()
+        lyrics.recognizeLanguage()
         lyrics.metadata.needsPersist = true
 
         if let idx = searchResult.firstIndex(where: { lyrics.quality > $0.quality }) {
